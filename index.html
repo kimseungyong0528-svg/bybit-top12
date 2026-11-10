@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+
+
+<meta charset="UTF-8">
+<title>Bybit 선물 실시간 TOP12</title>
+<style>
+  :root { --bg:#0b0e11; --card:#161a1e; --line:#2b3139; --txt:#eaecef; --sub:#848e9c; --up:#20b26c; --dn:#ef454a; --acc:#f7a600; --fav:#f0b90b; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--txt); font-family:-apple-system,"Segoe UI","Malgun Gothic",sans-serif; font-size:13px; overflow:hidden; user-select:none; }
+  header { display:flex; flex-wrap:wrap; gap:10px; align-items:center; padding:8px 12px; border-bottom:1px solid var(--line); background:var(--bg); }
+  .grp { display:flex; gap:4px; align-items:center; }
+  .grp span.lbl { color:var(--sub); margin-right:4px; }
+  .sep { width:1px; height:24px; background:var(--line); }
+  button { background:var(--card); color:var(--txt); border:1px solid var(--line); border-radius:6px; padding:6px 10px; cursor:pointer; font-size:13px; }
+  button.on { background:var(--acc); color:#000; border-color:var(--acc); font-weight:700; }
+  button.tool { padding:3px 6px; color:#b7bdc6; display:inline-flex; align-items:center; }
+  button.tool svg { width:22px; height:22px; display:block; fill:none; stroke:currentColor; stroke-width:1.5; stroke-linecap:round; }
+  button.tool:hover { color:#fff; }
+  button.tool.on { background:#2962ff; border-color:#2962ff; color:#fff; }
+  button.danger { color:#ef454a; }
+  select { background:var(--card); color:var(--txt); border:1px solid var(--line); border-radius:6px; padding:5px 6px; font-size:13px; }
+  #status { margin-left:auto; color:var(--sub); }
+  #grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); grid-template-rows:repeat(3,minmax(0,1fr)); gap:8px; padding:8px 10px; height:calc(100vh - var(--hh, 52px)); }
+  #empty { grid-column:1 / -1; grid-row:1 / -1; display:flex; align-items:center; justify-content:center; color:var(--sub); font-size:15px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:6px 10px 6px; position:relative; display:flex; flex-direction:column; min-height:0; min-width:0; }
+  .card.fav { border-color:var(--fav); }
+  .chart { flex:1; position:relative; min-height:0; }
+  .top { display:flex; align-items:baseline; gap:6px; }
+  .star svg { width:12px; height:12px; display:block; }
+  .star { cursor:pointer; color:#5e6673; font-size:0; line-height:0; padding:0; display:inline-flex; align-items:center; justify-content:center; width:20px; height:20px; border:1px solid #474d57; border-radius:4px; align-self:center; }
+  .star:hover { color:#c9a227; border-color:#c9a227; }
+  .star.on { color:var(--fav); border-color:var(--fav); }
+  .rank { color:var(--acc); font-weight:700; min-width:18px; }
+  .sym { font-weight:700; font-size:15px; cursor:pointer; }
+  .sym:hover { color:var(--acc); text-decoration:underline; }
+  .chg { margin-left:auto; font-weight:700; font-size:15px; }
+  .meta { color:var(--sub); display:flex; gap:10px; margin:2px 0 4px 44px; font-size:12px; }
+  .new { color:#000; background:var(--acc); border-radius:4px; padding:0 5px; font-size:11px; font-weight:700; }
+  canvas { position:absolute; inset:0; width:100%; height:100%; display:block; cursor:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='19' height='19'><path d='M9.5 1v17M1 9.5h17' stroke='%239aa0a6' stroke-width='1.4'/></svg>") 9 9, crosshair; }
+  .del { position:absolute; left:2px; bottom:2px; display:none; z-index:3; width:24px; height:24px; padding:3px; background:#1e2329; border:1px solid #474d57; border-radius:5px; color:#eaecef; cursor:pointer; }
+  .del:hover { color:#ff8fa3; border-color:#ff8fa3; }
+  .del svg { width:16px; height:16px; display:block; }
+  .up { color:var(--up); } .dn { color:var(--dn); }
+</style>
+</head>
+<body>
+<header>
+  <div class="grp"><span class="lbl">순위</span>
+    <button data-mode="vol" class="on">거래대금 TOP</button>
+    <button data-mode="gain">24h 상승 TOP</button>
+    <button data-mode="lose">24h 하락 TOP</button>
+    <button data-mode="fav">★ 즐겨찾기</button>
+  </div>
+  <div class="grp"><span class="lbl">차트</span>
+    <select id="itv">
+      <option value="5">5분</option><option value="15" selected>15분</option><option value="60">1시간</option><option value="240">4시간</option><option value="D">일봉</option>
+    </select>
+  </div>
+  <div class="grp"><label><input type="checkbox" id="exMajor"> BTC·ETH 제외</label></div>
+  <div class="sep"></div>
+  <div class="grp"><span class="lbl">그리기</span>
+    <button class="tool on" data-tool="cursor" title="커서 (그림 클릭: 선택, 드래그: 이동, 흰 점 드래그: 조절)"><svg viewBox="0 0 24 24"><path d="M12 3v6M12 15v6M3 12h6M15 12h6"/></svg></button>
+    <button class="tool" data-tool="rect" title="박스 (한 꼭짓점 클릭, 반대 꼭짓점 클릭)"><svg viewBox="0 0 24 24"><path d="M7.2 5h9.6M7.2 19h9.6M5 7.2v9.6M19 7.2v9.6"/><circle cx="5" cy="5" r="2.2"/><circle cx="19" cy="5" r="2.2"/><circle cx="5" cy="19" r="2.2"/><circle cx="19" cy="19" r="2.2"/></svg></button>
+    <button class="tool" data-tool="hline" title="수평선 (한 번 클릭)"><svg viewBox="0 0 24 24"><path d="M3 12h6.8M14.2 12H21"/><circle cx="12" cy="12" r="2.2"/></svg></button>
+    <button class="tool" data-tool="trend" title="추세선 (시작점 클릭, 끝점 클릭)"><svg viewBox="0 0 24 24"><path d="M6.6 17.4L17.4 6.6"/><circle cx="5" cy="19" r="2.2"/><circle cx="19" cy="5" r="2.2"/></svg></button>
+    <button class="tool" data-tool="fibR" title="피보나치 수평 (시작점(0) 클릭, 끝점(1) 클릭)"><svg viewBox="0 0 24 24"><path d="M3 4.5h18M3 9.5h14.8M3 14.5h18M6.2 19.5H21"/><circle cx="19.8" cy="9.5" r="2"/><circle cx="4.2" cy="19.5" r="2"/></svg></button>
+    <button class="tool" data-tool="fibC" title="피보나치 대각선 (기준선 시작점, 끝점 클릭 후 간격 클릭)"><svg viewBox="0 0 24 24"><path d="M6.9 9.9l10.2-5.3M6.9 15.4L19 9.2M5 21l14-7"/><circle cx="5" cy="10.9" r="2"/><circle cx="19" cy="3.6" r="2"/><circle cx="5" cy="16.4" r="2"/></svg></button>
+    <button id="clearAll" class="danger" title="모든 코인의 그림 삭제">전체삭제</button>
+  </div>
+  <span id="status">불러오는 중...</span>
+</header>
+<div id="grid"></div>
+
+<script>
+const API = 'https://api.bybit.com/v5/market';
+const COUNT = 12, MIN_TURNOVER = 0, REFRESH_MS = 10000;
+const STABLE = /^(USDC|USD1|USDE|FDUSD|TUSD|DAI|PYUSD|RLUSD|USDD|USDT|EURC|EUR)USDT$/;
+const FIB_LV = [-3, -2, -1, 0, 1, 2, 3];
+const COL = { line: '#ffb3c7', fib: '#9aa0a6', box: '#a855f7', boxFill: 'rgba(168,85,247,0.16)', last: '#6b7280' };
+const ERASER_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20H8.5L3.6 15.1a2 2 0 0 1 0-2.8L13.3 2.6a2 2 0 0 1 2.8 0l5.3 5.3a2 2 0 0 1 0 2.8L11 21"/><path d="M8 9l7 7"/></svg>';
+
+const $ = id => document.getElementById(id);
+const S = JSON.parse(localStorage.getItem('bbTop12v4') || '{}');
+let mode = S.mode || 'vol', ex = 'bybit';
+let byInfo = null, byInfoAt = 0;
+const BN = 'https://fapi.binance.com/fapi/v1', BN_ITV = { '5': '5m', '15': '15m', '60': '1h', '240': '4h', 'D': '1d' };
+let bnInfo = null, bnInfoAt = 0;
+if (S.itv) $('itv').value = S.itv;
+if (S.exMajor) $('exMajor').checked = true;
+let favs = JSON.parse(localStorage.getItem('bbFav') || '[]');
+let drawings = JSON.parse(localStorage.getItem('bbDraw') || '{}');   // { SYMBOL: [ {type, p1:{t,p}, p2:{t,p}, p3?} ] }
+for (const k in drawings) { drawings[k] = drawings[k].filter(d => d.type !== 'fibF'); if (!drawings[k].length) delete drawings[k]; }
+let tool = 'cursor', pending = null, selected = null, drag = null;
+let cards = [], prevSyms = new Set(), reqId = 0;
+let undoStack = [], redoStack = [], clip = null, hoverSym = null;
+const snap = () => JSON.stringify(drawings);
+function pushUndo(before) { undoStack.push(before ?? snap()); if (undoStack.length > 100) undoStack.shift(); redoStack = []; }
+function restoreDraw(s) { drawings = JSON.parse(s); selected = null; pending = null; saveDraw(); redrawAll(); }
+function undo() { if (!undoStack.length) return; redoStack.push(snap()); restoreDraw(undoStack.pop()); }
+function redo() { if (!redoStack.length) return; undoStack.push(snap()); restoreDraw(redoStack.pop()); }
+function copySelected() {
+  if (!selected || !drawings[selected.sym] || !drawings[selected.sym][selected.i]) return false;
+  clip = { sym: selected.sym, d: JSON.parse(JSON.stringify(drawings[selected.sym][selected.i])) };
+  return true;
+}
+function paste() {
+  if (!clip) return;
+  const card = cardOf(hoverSym) || cardOf(clip.sym);
+  if (!card || !card.G) return;
+  const d = JSON.parse(JSON.stringify(clip.d));
+  if (card.sym !== clip.sym && card.hover) {   // other coin: move the copy to the mouse position
+    const t = card.G.t(card.hover.x), p = card.G.p(card.hover.y), dt = t - d.p1.t, dp = p - d.p1.p;
+    ['p1', 'p2', 'p3'].forEach(k => { if (d[k]) d[k] = { t: d[k].t + dt, p: d[k].p + dp }; });
+  }
+  pushUndo();
+  const arr = (drawings[card.sym] = drawings[card.sym] || []);
+  arr.push(d); selected = { sym: card.sym, i: arr.length - 1 };
+  saveDraw(); redrawAll();
+}
+
+function save() { localStorage.setItem('bbTop12v4', JSON.stringify({ mode, ex, itv:$('itv').value, exMajor:$('exMajor').checked })); }
+function saveDraw() { localStorage.setItem('bbDraw', JSON.stringify(drawings)); }
+function saveFav() { localStorage.setItem('bbFav', JSON.stringify(favs)); }
+function fitGrid() { document.documentElement.style.setProperty('--hh', document.querySelector('header').offsetHeight + 'px'); }
+const cardOf = sym => cards.find(c => c.sym === sym);
+const redrawAll = () => cards.forEach(drawCard);
+
+document.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => {
+  mode = b.dataset.mode; prevSyms = new Set(); selected = null;
+  document.querySelectorAll('[data-mode]').forEach(x => x.classList.toggle('on', x === b));
+  save(); load();
+});
+['itv','exMajor'].forEach(id => $(id).onchange = () => { save(); load(); });
+document.querySelectorAll('[data-ex]').forEach(b => b.onclick = () => {
+  if (ex === b.dataset.ex) return;
+  ex = b.dataset.ex; prevSyms = new Set(); selected = null;
+  document.querySelectorAll('[data-ex]').forEach(x => x.classList.toggle('on', x === b));
+  save(); load();
+});
+
+function setTool(t) {
+  tool = t; pending = null;
+  if (t !== 'cursor') selected = null;
+  document.querySelectorAll('[data-tool]').forEach(x => x.classList.toggle('on', x.dataset.tool === t));
+  document.body.classList.toggle('drawing', t !== 'cursor');
+  redrawAll();
+}
+document.querySelectorAll('[data-tool]').forEach(b => b.onclick = () => setTool(b.dataset.tool));
+$('clearAll').onclick = () => {
+  if (!confirm('모든 코인에 그린 그림을 전부 지울까요? (Ctrl+Z로 되돌릴 수 있어요)')) return;
+  pushUndo(); drawings = {}; selected = null; saveDraw(); redrawAll();
+};
+function deleteSelected() {
+  if (!selected || !drawings[selected.sym] || !drawings[selected.sym][selected.i]) return;
+  pushUndo();
+  const arr = drawings[selected.sym];
+  arr.splice(selected.i, 1);
+  if (!arr.length) delete drawings[selected.sym];
+  const c = cardOf(selected.sym); selected = null; saveDraw(); if (c) drawCard(c);
+}
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT') return;
+  if (e.key === 'Escape') { selected = null; setTool('cursor'); return; }
+  if ((e.key === 'Delete' || e.key === 'Backspace') && selected) { e.preventDefault(); deleteSelected(); return; }
+  if (!(e.ctrlKey || e.metaKey)) return;
+  // e.code works even when the Korean IME is on
+  if (e.code === 'KeyZ' && !e.shiftKey) { e.preventDefault(); undo(); }
+  else if (e.code === 'KeyY' || (e.code === 'KeyZ' && e.shiftKey)) { e.preventDefault(); redo(); }
+  else if (e.code === 'KeyX') { e.preventDefault(); if (copySelected()) deleteSelected(); }
+  else if (e.code === 'KeyC') { if (copySelected()) e.preventDefault(); }
+  else if (e.code === 'KeyV') { if (clip) { e.preventDefault(); paste(); } }
+});
+function toggleFav(sym, el) {
+  const i = favs.indexOf(sym);
+  if (i >= 0) favs.splice(i, 1); else favs.push(sym);
+  saveFav();
+  if (mode === 'fav') { load(); return; }
+  const on = favs.includes(sym);
+  el.closest('.card').classList.toggle('fav', on);
+  el.classList.toggle('on', on); el.innerHTML = starSvg(on);
+}
+
+function starSvg(on) {
+  return `<svg viewBox="0 0 24 24"><path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.3 1.3-6.6-4.9-4.6 6.6-.8z" fill="${on ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>`;
+}
+// Coin name click.
+// With the '대시보드 → 바이비트 연결' extension installed: go to the already-open Bybit tab, switch coin + timeframe
+// (new window only if Bybit is not open). Without it: reuse the tab this dashboard opened before.
+function openBybit(sym) {
+  if (document.documentElement.dataset.bybitLink === '1') {
+    window.postMessage({ type: 'BYBIT_OPEN', sym, iv: $('itv').value }, '*');
+    return;
+  }
+  const w = window.open('https://www.bybit.com/trade/usdt/' + sym, 'bybitFromDashboard');
+  if (w) { try { w.focus(); } catch (e) {} }
+}
+function fmtUsd(v) { if (v >= 1e9) return '$' + (v/1e9).toFixed(2) + 'B'; if (v >= 1e6) return '$' + (v/1e6).toFixed(1) + 'M'; return '$' + (v/1e3).toFixed(0) + 'K'; }
+function fmtPx(p) { p = +p; const a = Math.abs(p); if (a >= 100) return p.toFixed(2); if (a >= 1) return p.toFixed(4); return p.toPrecision(4); }
+
+// common ticker shape: { symbol, pct (fraction), turnover (USDT), last }
+async function getTickers() {
+  if (ex === 'binance') {
+    if (!bnInfo || Date.now() - bnInfoAt > 30 * 60 * 1000) {   // tradable USDT perpetuals, refreshed every 30 min
+      const ei = await (await fetch(`${BN}/exchangeInfo`)).json();
+      bnInfo = new Set(ei.symbols.filter(s => s.status === 'TRADING' && s.contractType === 'PERPETUAL' && s.quoteAsset === 'USDT' && s.underlyingType !== 'PREMARKET').map(s => s.symbol));
+      bnInfoAt = Date.now();
+    }
+    const t = await (await fetch(`${BN}/ticker/24hr`)).json();
+    return t.filter(x => bnInfo.has(x.symbol)).map(x => ({ symbol: x.symbol, pct: x.priceChangePercent / 100, turnover: +x.quoteVolume, last: +x.lastPrice }));
+  }
+  if (!byInfo || Date.now() - byInfoAt > 30 * 60 * 1000) {
+    // Bybit 'Crypto > Perpetual > USDT' list only: drop TradFi (stock, ETF, commodity, forex) contracts
+    const all = []; let cursor = '';
+    do {
+      const r = await (await fetch(`${API}/instruments-info?category=linear&limit=1000${cursor ? '&cursor=' + encodeURIComponent(cursor) : ''}`)).json();
+      all.push(...r.result.list); cursor = r.result.nextPageCursor;
+    } while (cursor);
+    byInfo = new Set(all.filter(s => s.contractType === 'LinearPerpetual' && s.status === 'Trading' && s.quoteCoin === 'USDT' && (!s.symbolType || s.symbolType === 'innovation')).map(s => s.symbol));
+    byInfoAt = Date.now();
+  }
+  const j = await (await fetch(`${API}/tickers?category=linear`)).json();
+  return j.result.list.filter(x => byInfo.has(x.symbol) && (!x.curPreListingPhase || x.curPreListingPhase === 'Finished'))
+    .map(x => ({ symbol: x.symbol, pct: +x.price24hPcnt, turnover: +x.turnover24h, last: +x.lastPrice }));
+}
+async function getTop() {
+  const all = await getTickers();
+  if (mode === 'fav') {
+    const bySym = Object.fromEntries(all.map(t => [t.symbol, t]));
+    return favs.map(s => bySym[s]).filter(Boolean).slice(0, COUNT);
+  }
+  let list = all.filter(t => !STABLE.test(t.symbol) && t.turnover >= MIN_TURNOVER && t.last > 0);
+  if ($('exMajor').checked) list = list.filter(t => !/^(BTC|ETH)USDT$/.test(t.symbol));
+  const key = mode === 'vol' ? (t => -t.turnover) : mode === 'gain' ? (t => -t.pct) : (t => t.pct);
+  list.sort((a, b) => key(a) - key(b));
+  return list.slice(0, COUNT);
+}
+async function getKline(sym) {
+  if (ex === 'binance') {
+    const k = await (await fetch(`${BN}/klines?symbol=${sym}&interval=${BN_ITV[$('itv').value]}&limit=60`)).json();
+    return (Array.isArray(k) ? k : []).map(r => ({ t:+r[0], o:+r[1], h:+r[2], l:+r[3], c:+r[4], v:+r[5] }));
+  }
+  const j = await (await fetch(`${API}/kline?category=linear&symbol=${sym}&interval=${$('itv').value}&limit=60`)).json();
+  if (j.retCode !== 0) throw new Error(j.retMsg || 'kline error');   // e.g. 10006 rate limit
+  return (j.result?.list || []).map(k => ({ t:+k[0], o:+k[1], h:+k[2], l:+k[3], c:+k[4], v:+k[5] })).reverse();
+}
+
+// Candle cache: full candles are re-downloaded only when a coin is new, every 60 s, or when a new candle starts.
+// In between, the last candle is updated from the ticker price. This keeps requests far below Bybit's rate limit.
+const klineCache = {};
+const wait = ms => new Promise(r => setTimeout(r, ms));
+async function getKlineRetry(sym) {
+  for (let a = 0; a < 4; a++) {
+    try { return await getKline(sym); } catch (e) { await wait(700 * (a + 1)); }
+  }
+  throw new Error('kline failed');
+}
+async function getKlinesFor(top) {
+  const itv = $('itv').value, now = Date.now();
+  const need = top.filter(t => {
+    const c = klineCache[t.symbol + '|' + itv];
+    if (!c || !c.ks.length) return true;
+    const ks = c.ks, last = ks[ks.length - 1], step = ks.length > 1 ? ks[1].t - ks[0].t : 60000;
+    return now - c.at > 60000 || now >= last.t + step;
+  });
+  let idx = 0;
+  const worker = async () => {
+    while (idx < need.length) {
+      const t = need[idx++];
+      try { const ks = await getKlineRetry(t.symbol); if (ks.length) klineCache[t.symbol + '|' + itv] = { ks, at: Date.now() }; } catch (e) { /* keep the previous candles */ }
+    }
+  };
+  await Promise.all([worker(), worker(), worker()]);   // at most 3 requests at a time
+  return top.map(t => {
+    const c = klineCache[t.symbol + '|' + itv];
+    if (!c) return [];
+    const last = c.ks[c.ks.length - 1];
+    if (last && t.last > 0) { last.c = t.last; last.h = Math.max(last.h, t.last); last.l = Math.min(last.l, t.last); }
+    return c.ks;
+  });
+}
+
+// ---------- chart geometry: price/time <-> pixels ----------
+function geo(cv, ks) {
+  const W = cv.clientWidth, H = cv.clientHeight;
+  const volH = Math.min(36, H * 0.15), padR = 58, chartH = H - volH - 4, plotW = W - padR;
+  const hi = Math.max(...ks.map(k => k.h)), lo = Math.min(...ks.map(k => k.l)), rng = (hi - lo) || hi * 0.01 || 1;
+  const n = ks.length, cw = plotW / (n + 1), t0 = ks[0].t, step = n > 1 ? ks[1].t - ks[0].t : 60000;
+  return { W, H, volH, padR, chartH, plotW, hi, lo, n, cw,
+    x: t => (t - t0) / step * cw + cw / 2,
+    t: x => t0 + (x - cw / 2) / cw * step,
+    y: p => 4 + (hi - p) / rng * (chartH - 8),
+    p: y => hi - (y - 4) / (chartH - 8) * rng };
+}
+
+function drawCard(card) {
+  const { cv, ks, sym } = card;
+  const dpr = window.devicePixelRatio || 1;
+  const W = cv.clientWidth, H = cv.clientHeight;
+  cv.width = W * dpr; cv.height = H * dpr;
+  const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, W, H);
+  card.del.style.display = 'none';
+  if (!ks.length || W < 20 || H < 20) {
+    if (!ks.length && W >= 20) { g.fillStyle = '#5e6673'; g.font = '12px sans-serif'; g.textAlign = 'center'; g.fillText('차트 불러오는 중… (10초 뒤 자동 재시도)', W / 2, H / 2); g.textAlign = 'start'; }
+    return;
+  }
+  const G = card.G = geo(cv, ks);
+  const vmax = Math.max(...ks.map(k => k.v)) || 1, bw = Math.max(1, G.cw * 0.65);
+  g.strokeStyle = '#2b3139'; g.lineWidth = 1;
+  line(g, 0, G.chartH, G.plotW, G.chartH);   // only the candle / volume separator
+  ks.forEach((k, i) => {
+    const x = i * G.cw + G.cw / 2, up = k.c >= k.o;
+    g.strokeStyle = g.fillStyle = up ? '#20b26c' : '#ef454a';
+    line(g, x, G.y(k.h), x, G.y(k.l));
+    const t = G.y(Math.max(k.o, k.c)), b = G.y(Math.min(k.o, k.c));
+    g.fillRect(x - bw / 2, t, bw, Math.max(1, b - t));
+    g.globalAlpha = 0.35; const vh = k.v / vmax * G.volH; g.fillRect(x - bw / 2, H - vh, bw, vh); g.globalAlpha = 1;
+  });
+  // current price: small gray dots
+  const last = ks[G.n - 1].c, ly = G.y(last);
+  g.setLineDash([1, 3]); g.strokeStyle = COL.last; g.lineWidth = 1;
+  line(g, 0, ly, G.plotW, ly); g.setLineDash([]);
+  g.font = '11px sans-serif'; g.fillStyle = '#848e9c';
+  g.fillText(fmtPx(G.hi), G.plotW + 4, 12);
+  g.fillText(fmtPx(G.lo), G.plotW + 4, G.chartH - 2);
+  // user drawings
+  const list = (drawings[sym] || []).map((d, i) => ({ ...d, sel: selected && selected.sym === sym && selected.i === i }));
+  if (pending && pending.sym === sym && pending.m) {
+    if (pending.type === 'fibC') list.push(pending.p2 ? { type: 'fibC', p1: pending.p1, p2: pending.p2, p3: pending.m, preview: true }
+                                                     : { type: 'fibBase', p1: pending.p1, p2: pending.m, preview: true });
+    else list.push({ type: pending.type, p1: pending.p1, p2: pending.m, preview: true });
+  }
+  g.save(); g.beginPath(); g.rect(0, 0, G.plotW, G.chartH); g.clip();
+  list.forEach(d => renderDrawing(g, G, d));
+  if (pending && pending.sym === sym) { dot(g, G.x(pending.p1.t), G.y(pending.p1.p)); if (pending.p2) dot(g, G.x(pending.p2.t), G.y(pending.p2.p)); }
+  list.filter(d => d.sel).forEach(d => handles(d).forEach(h => dot(g, h.x(G), h.y(G))));
+  g.restore();
+  list.filter(d => d.type === 'hline').forEach(d => axisLabel(g, G, d.p1.p, COL.line, '#000'));
+  axisLabel(g, G, last, '#5e6673', '#fff');
+  // crosshair: gray vertical + horizontal lines following the mouse
+  if (card.hover && !drag) {
+    const { x, y } = card.hover;
+    const idx = Math.round((x - G.cw / 2) / G.cw);
+    const cx = idx >= 0 && idx < G.n ? idx * G.cw + G.cw / 2 : x;
+    g.save(); g.setLineDash([4, 4]); g.strokeStyle = '#787b86'; g.lineWidth = 1;
+    if (cx <= G.plotW) line(g, cx, 0, cx, H);
+    if (y <= G.chartH) line(g, 0, y, G.plotW, y);
+    g.restore();
+    if (y <= G.chartH) axisLabel(g, G, G.p(y), '#363a45', '#fff');
+  }
+  // eraser button (bottom-left) only while a drawing on this chart is selected
+  if (selected && selected.sym === sym && drawings[sym] && drawings[sym][selected.i] && !drag) card.del.style.display = 'block';
+}
+function axisLabel(g, G, p, bg, fg) {
+  const y = Math.min(G.chartH - 6, Math.max(6, G.y(p)));
+  g.fillStyle = bg; g.fillRect(G.plotW + 1, y - 7, G.padR - 1, 14);
+  g.fillStyle = fg; g.font = '11px sans-serif'; g.fillText(fmtPx(p), G.plotW + 4, y + 4);
+}
+function line(g, x1, y1, x2, y2) { g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke(); }
+function dot(g, x, y) { g.setLineDash([]); g.fillStyle = '#0b0e11'; g.strokeStyle = '#ffffff'; g.lineWidth = 1.5; g.beginPath(); g.arc(x, y, 4, 0, 7); g.fill(); g.stroke(); }
+function handles(d) {
+  if (d.type === 'hline') return [{ x: G => G.plotW * 0.5, y: G => G.y(d.p1.p), part: 'move' }];
+  if (d.type === 'rect') {
+    const X = { t1: G => G.x(d.p1.t), t2: G => G.x(d.p2.t), tm: G => (G.x(d.p1.t) + G.x(d.p2.t)) / 2 };
+    const Y = { p1: G => G.y(d.p1.p), p2: G => G.y(d.p2.p), pm: G => (G.y(d.p1.p) + G.y(d.p2.p)) / 2 };
+    return [['t1','p1'],['t2','p2'],['t1','p2'],['t2','p1'],['t1','pm'],['t2','pm'],['tm','p1'],['tm','p2']]
+      .map(([a, b]) => ({ x: X[a], y: Y[b], part: 'r:' + (a === 'tm' ? '' : a) + (b === 'pm' ? '' : b) }));
+  }
+  const h = [{ x: G => G.x(d.p1.t), y: G => G.y(d.p1.p), part: 'p1' }, { x: G => G.x(d.p2.t), y: G => G.y(d.p2.p), part: 'p2' }];
+  if (d.p3) h.push({ x: G => G.x(d.p3.t), y: G => G.y(d.p3.p), part: 'p3' });
+  return h;
+}
+function resizeCursor(part) {
+  if (part === 'move') return 'move';
+  if (!part.startsWith('r:')) return 'pointer';
+  const t = /t\d/.test(part), p = /p\d/.test(part);
+  return t && p ? 'nwse-resize' : t ? 'ew-resize' : 'ns-resize';
+}
+const fibPrice = (d, lv) => d.p1.p + (d.p2.p - d.p1.p) * lv;   // fibR: 0 = start, 1 = end
+
+// fib channel: base line p1->p2 is level 0, the parallel line through p3 is level 1
+function channelLines(G, d) {
+  const x1 = G.x(d.p1.t), x2 = G.x(d.p2.t);
+  if (Math.abs(x2 - x1) < 1) return [];
+  const slope = (d.p2.p - d.p1.p) / (d.p2.t - d.p1.t);
+  const off = d.p3 ? d.p3.p - (d.p1.p + slope * (d.p3.t - d.p1.t)) : 0;
+  const ta = G.t(0), tb = G.t(G.plotW);   // extend both ways to the chart edges
+  return FIB_LV.map(lv => [lv, 0, G.y(d.p1.p + slope * (ta - d.p1.t) + off * lv), G.plotW, G.y(d.p1.p + slope * (tb - d.p1.t) + off * lv)]);
+}
+
+function renderDrawing(g, G, d) {
+  g.lineWidth = d.sel ? 2.2 : 1.3; g.setLineDash(d.preview ? [4, 3] : []);
+  const x1 = G.x(d.p1.t), y1 = G.y(d.p1.p);
+  if (d.type === 'hline') { g.strokeStyle = COL.line; line(g, 0, y1, G.plotW, y1); return; }
+  const x2 = G.x(d.p2.t), y2 = G.y(d.p2.p);
+  if (d.type === 'trend') { g.strokeStyle = COL.line; line(g, x1, y1, x2, y2); }
+  else if (d.type === 'fibBase') { g.strokeStyle = COL.fib; line(g, x1, y1, x2, y2); }
+  else if (d.type === 'rect') {
+    const rx = Math.min(x1, x2), ry = Math.min(y1, y2), rw = Math.abs(x2 - x1), rh = Math.abs(y2 - y1);
+    g.fillStyle = COL.boxFill; g.fillRect(rx, ry, rw, rh);
+    g.strokeStyle = COL.box; g.strokeRect(rx, ry, rw, rh);
+  }
+  else if (d.type === 'fibR') {
+    FIB_LV.forEach(lv => {
+      const y = G.y(fibPrice(d, lv));
+      g.strokeStyle = COL.fib; g.globalAlpha = (lv === 0 || lv === 1) ? 1 : 0.7;
+      line(g, 0, y, G.plotW, y); g.globalAlpha = 1;
+    });
+    g.setLineDash([2, 3]); g.strokeStyle = COL.fib; line(g, x1, y1, x2, y2);
+  }
+  else if (d.type === 'fibC') {
+    channelLines(G, d).forEach(([lv, ax, ay, bx, by]) => {
+      g.strokeStyle = COL.fib; g.globalAlpha = (lv === 0 || lv === 1) ? 1 : 0.7;
+      line(g, ax, ay, bx, by); g.globalAlpha = 1;
+    });
+  }
+}
+
+// ---------- hit test ----------
+function segDist(px, py, x1, y1, x2, y2) {
+  const dx = x2 - x1, dy = y2 - y1, L = dx * dx + dy * dy;
+  let u = L ? ((px - x1) * dx + (py - y1) * dy) / L : 0; u = Math.max(0, Math.min(1, u));
+  return Math.hypot(px - (x1 + u * dx), py - (y1 + u * dy));
+}
+function hit(G, d, mx, my) {
+  const T = 6, x1 = G.x(d.p1.t), y1 = G.y(d.p1.p);
+  if (d.type === 'hline') return Math.abs(my - y1) < T;
+  const x2 = G.x(d.p2.t), y2 = G.y(d.p2.p);
+  if (d.type === 'trend') return segDist(mx, my, x1, y1, x2, y2) < T;
+  if (d.type === 'rect') return mx > Math.min(x1, x2) - T && mx < Math.max(x1, x2) + T && my > Math.min(y1, y2) - T && my < Math.max(y1, y2) + T;
+  if (d.type === 'fibR') return FIB_LV.some(lv => Math.abs(my - G.y(fibPrice(d, lv))) < T);
+  if (d.type === 'fibC') return channelLines(G, d).some(([, ax, ay, bx, by]) => segDist(mx, my, ax, ay, bx, by) < T);
+  return false;
+}
+function findHit(card, x, y) {
+  const arr = drawings[card.sym] || [];
+  if (selected && selected.sym === card.sym && arr[selected.i]) {
+    const d = arr[selected.i], G = card.G;
+    for (const h of handles(d)) if (Math.hypot(x - h.x(G), y - h.y(G)) < 8) return { i: selected.i, part: h.part };
+    if (d.type === 'rect') {   // grab a side of the selected box to resize it
+      const x1 = G.x(d.p1.t), x2 = G.x(d.p2.t), y1 = G.y(d.p1.p), y2 = G.y(d.p2.p), T = 5;
+      const inY = y > Math.min(y1, y2) - T && y < Math.max(y1, y2) + T, inX = x > Math.min(x1, x2) - T && x < Math.max(x1, x2) + T;
+      if (inY && Math.abs(x - x1) < T) return { i: selected.i, part: 'r:t1' };
+      if (inY && Math.abs(x - x2) < T) return { i: selected.i, part: 'r:t2' };
+      if (inX && Math.abs(y - y1) < T) return { i: selected.i, part: 'r:p1' };
+      if (inX && Math.abs(y - y2) < T) return { i: selected.i, part: 'r:p2' };
+    }
+  }
+  for (let i = arr.length - 1; i >= 0; i--) if (hit(card.G, arr[i], x, y)) return { i, part: 'move' };
+  return null;
+}
+
+// ---------- mouse ----------
+function attachMouse(card) {
+  const { cv } = card;
+  const pos = e => { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  cv.addEventListener('mousedown', e => {
+    if (tool !== 'cursor' || !card.G || e.button !== 0) return;
+    const [x, y] = pos(e), h = findHit(card, x, y);
+    const prev = selected && selected.sym !== card.sym ? cardOf(selected.sym) : null;
+    if (!h) { selected = null; drawCard(card); if (prev) drawCard(prev); return; }
+    selected = { sym: card.sym, i: h.i };
+    drag = { card, part: h.part, x0: x, y0: y, orig: JSON.parse(JSON.stringify(drawings[card.sym][h.i])), before: snap(), moved: false };
+    if (prev) drawCard(prev);
+    drawCard(card); e.preventDefault();
+  });
+  cv.addEventListener('mousemove', e => {
+    if (!card.G) return;
+    const [x, y] = pos(e);
+    card.hover = { x, y }; hoverSym = card.sym;
+    if (pending && pending.sym === card.sym) pending.m = { t: card.G.t(x), p: card.G.p(y) };
+    if (tool === 'cursor' && !drag) {
+      const h = findHit(card, x, y);
+      cv.style.cursor = !h ? '' : resizeCursor(h.part);
+    }
+    if (!drag) drawCard(card);
+  });
+  cv.addEventListener('mouseleave', () => { card.hover = null; if (!drag) drawCard(card); });
+  cv.addEventListener('click', e => {
+    if (tool === 'cursor' || !card.G) return;
+    const [x, y] = pos(e), P = { t: card.G.t(x), p: card.G.p(y) };
+    if (tool === 'hline') { addDrawing(card, { type: 'hline', p1: P }); return; }
+    if (!pending || pending.sym !== card.sym) {
+      const old = pending && cardOf(pending.sym);
+      pending = { sym: card.sym, type: tool, p1: P, m: P };
+      if (old) drawCard(old);
+      drawCard(card); return;
+    }
+    if (tool === 'fibC' && !pending.p2) { pending.p2 = P; drawCard(card); return; }
+    if (tool === 'fibC') addDrawing(card, { type: 'fibC', p1: pending.p1, p2: pending.p2, p3: P });
+    else addDrawing(card, { type: tool, p1: pending.p1, p2: P });
+  });
+}
+window.addEventListener('mousemove', e => {
+  if (!drag) return;
+  const { card, part, x0, y0, orig } = drag, G = card.G, d = drawings[card.sym][selected.i];
+  const r = card.cv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+  drag.moved = true;
+  if (part === 'move') {
+    const dt = G.t(x) - G.t(x0), dp = G.p(y) - G.p(y0);
+    ['p1', 'p2', 'p3'].forEach(k => { if (orig[k]) d[k] = { t: orig[k].t + dt, p: orig[k].p + dp }; });
+  } else if (part.startsWith('r:')) {
+    if (part.includes('t1')) d.p1 = { ...d.p1, t: G.t(x) };
+    if (part.includes('t2')) d.p2 = { ...d.p2, t: G.t(x) };
+    if (part.includes('p1')) d.p1 = { ...d.p1, p: G.p(y) };
+    if (part.includes('p2')) d.p2 = { ...d.p2, p: G.p(y) };
+  } else {
+    d[part] = { t: G.t(x), p: G.p(y) };
+  }
+  drawCard(card);
+});
+window.addEventListener('mouseup', () => {
+  if (!drag) return;
+  const c = drag.card;
+  if (drag.moved) pushUndo(drag.before);
+  drag = null; saveDraw(); drawCard(c);
+});
+function addDrawing(card, d) {
+  pushUndo();
+  (drawings[card.sym] = drawings[card.sym] || []).push(d); saveDraw();
+  pending = null; setTool('cursor');
+}
+
+// ---------- refresh ----------
+async function load() {
+  const my = ++reqId;
+  try {
+    const top = await getTop();
+    const klines = await getKlinesFor(top);
+    if (my !== reqId) return;
+    if (pending || drag) { $('status').textContent = '그리는 중이라 갱신 잠시 멈춤'; return; }
+    fitGrid();
+    const grid = $('grid'); grid.innerHTML = ''; cards = [];
+    if (!top.length && mode === 'fav') grid.innerHTML = '<div id="empty">아직 즐겨찾기가 없어요. 차트 카드의 ☆을 누르면 여기에 모여요.</div>';
+    top.forEach((t, i) => {
+      const pc = t.pct * 100, isFav = favs.includes(t.symbol);
+      const isNew = mode !== 'fav' && prevSyms.size && !prevSyms.has(t.symbol);
+      const el = document.createElement('div');
+      el.className = 'card' + (isFav ? ' fav' : '');
+      el.innerHTML = `
+        <div class="top"><span class="star${isFav ? ' on' : ''}" title="즐겨찾기">${starSvg(isFav)}</span><span class="rank">${i + 1}</span><span class="sym" title="바이비트에서 열기">${t.symbol.replace(/USDT$/, '')}</span>
+          ${isNew ? '<span class="new">NEW</span>' : ''}
+          <span class="chg ${pc >= 0 ? 'up' : 'dn'}">${pc >= 0 ? '+' : ''}${pc.toFixed(2)}%</span></div>
+        <div class="chart"><canvas></canvas><button class="del" title="삭제 (Delete 키)">${ERASER_SVG}</button></div>`;
+      grid.appendChild(el);
+      const card = { sym: t.symbol, cv: el.querySelector('canvas'), del: el.querySelector('.del'), ks: klines[i] };
+      el.querySelector('.sym').onclick = () => openBybit(t.symbol);
+      const star = el.querySelector('.star');
+      star.onclick = () => toggleFav(t.symbol, star);
+      card.del.addEventListener('mousedown', e => e.stopPropagation());
+      card.del.onclick = e => { e.stopPropagation(); deleteSelected(); };
+      cards.push(card); attachMouse(card); drawCard(card);
+    });
+    if (mode !== 'fav') prevSyms = new Set(top.map(t => t.symbol));
+    $('status').textContent = '마지막 갱신 ' + new Date().toLocaleTimeString('ko-KR');
+  } catch (e) {
+    if (my === reqId) $('status').textContent = '불러오기 실패, 10초 뒤 재시도';
+  }
+}
+window.addEventListener('resize', () => { fitGrid(); redrawAll(); });
+document.querySelectorAll('[data-mode]').forEach(x => x.classList.toggle('on', x.dataset.mode === mode));
+document.querySelectorAll('[data-ex]').forEach(x => x.classList.toggle('on', x.dataset.ex === ex));
+fitGrid(); load(); setInterval(load, REFRESH_MS);
+</script>
+</body>
+</html>
