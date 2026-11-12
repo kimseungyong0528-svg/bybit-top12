@@ -8,7 +8,7 @@
 
 
 <meta charset="UTF-8">
-<title>Bybit 선물 실시간 TOP6</title>
+<title>Bybit 선물 실시간 TOP</title>
 <style>
   :root { --bg:#0b0e11; --card:#161a1e; --line:#2b3139; --txt:#eaecef; --sub:#848e9c; --up:#20b26c; --dn:#ef454a; --acc:#f7a600; --fav:#f0b90b; }
   * { box-sizing:border-box; }
@@ -30,6 +30,8 @@
   #empty { grid-column:1 / -1; grid-row:1 / -1; display:flex; align-items:center; justify-content:center; color:var(--sub); font-size:15px; }
   .card { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:6px 10px 6px; position:relative; display:flex; flex-direction:column; min-height:0; min-width:0; }
   .card.fav { border-color:var(--fav); }
+  .btcwrap { display:grid; grid-template-rows:repeat(2,minmax(0,1fr)); gap:6px; min-height:0; min-width:0; }
+  .tf { color:#000; background:#eaecef; border-radius:4px; padding:0 6px; font-size:12px; font-weight:700; }
   .chart { flex:1; position:relative; min-height:0; }
   .top { display:flex; align-items:baseline; gap:6px; }
   .star svg { width:12px; height:12px; display:block; }
@@ -52,10 +54,8 @@
 <body>
 <header>
   <div class="grp"><span class="lbl">순위</span>
-    <button data-mode="vol" class="on">거래대금 TOP</button>
-    <button data-mode="gain">24h 상승 TOP</button>
+    <button data-mode="gain" class="on">24h 상승 TOP</button>
     <button data-mode="lose">24h 하락 TOP</button>
-    <button data-mode="fav">★ 즐겨찾기</button>
   </div>
   <div class="grp"><span class="lbl">차트</span>
     <select id="itv">
@@ -79,7 +79,7 @@
 
 <script>
 const API = 'https://api.bybit.com/v5/market';
-const COUNT = 6, MIN_TURNOVER = 0, REFRESH_MS = 10000;
+const COUNT = 5, SHOW = 50, MIN_TURNOVER = 0, REFRESH_MS = 10000;
 const STABLE = /^(USDC|USD1|USDE|FDUSD|TUSD|DAI|PYUSD|RLUSD|USDD|USDT|EURC|EUR)USDT$/;
 const FIB_LV = [-3, -2, -1, 0, 1, 2, 3];
 const COL = { line: '#ffb3c7', fib: '#9aa0a6', box: '#a855f7', boxFill: 'rgba(168,85,247,0.16)', last: '#6b7280' };
@@ -87,7 +87,7 @@ const ERASER_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" s
 
 const $ = id => document.getElementById(id);
 const S = JSON.parse(localStorage.getItem('bbTop12v4') || '{}');
-let mode = S.mode || 'vol', ex = 'bybit';
+let mode = (S.mode === 'gain' || S.mode === 'lose') ? S.mode : 'gain', ex = 'bybit';
 let byInfo = null, byInfoAt = 0;
 const BN = 'https://fapi.binance.com/fapi/v1', BN_ITV = { '5': '5m', '15': '15m', '60': '1h', '240': '4h', 'D': '1d' };
 let bnInfo = null, bnInfoAt = 0;
@@ -180,10 +180,11 @@ function toggleFav(sym, el) {
   const i = favs.indexOf(sym);
   if (i >= 0) favs.splice(i, 1); else favs.push(sym);
   saveFav();
-  if (mode === 'fav') { load(); return; }
   const on = favs.includes(sym);
-  el.closest('.card').classList.toggle('fav', on);
-  el.classList.toggle('on', on); el.innerHTML = starSvg(on);
+  document.querySelectorAll('.card[data-coin="' + sym + '"]').forEach(c => {
+    c.classList.toggle('fav', on);
+    const s = c.querySelector('.star'); s.classList.toggle('on', on); s.innerHTML = starSvg(on);
+  });
 }
 
 function starSvg(on) {
@@ -230,22 +231,23 @@ async function getTickers() {
 }
 async function getTop() {
   const all = await getTickers();
-  if (mode === 'fav') {
-    const bySym = Object.fromEntries(all.map(t => [t.symbol, t]));
-    return favs.map(s => bySym[s]).filter(Boolean).slice(0, COUNT);
-  }
-  let list = all.filter(t => !STABLE.test(t.symbol) && t.turnover >= MIN_TURNOVER && t.last > 0);
+  const btc = all.find(t => t.symbol === 'BTCUSDT') || { symbol: 'BTCUSDT', pct: 0, last: 0 };
+  let list = all.filter(t => !STABLE.test(t.symbol) && t.symbol !== 'BTCUSDT' && t.turnover >= MIN_TURNOVER && t.last > 0);
   if ($('exMajor').checked) list = list.filter(t => !/^(BTC|ETH)USDT$/.test(t.symbol));
-  const key = mode === 'vol' ? (t => -t.turnover) : mode === 'gain' ? (t => -t.pct) : (t => t.pct);
+  const key = mode === 'gain' ? (t => -t.pct) : (t => t.pct);
   list.sort((a, b) => key(a) - key(b));
-  return list.slice(0, COUNT);
+  return [
+    { ...btc, itv: '60', key: 'BTCUSDT', kind: 'btc', tfLabel: '1시간', ema: true, plain: true, lim: SHOW + 120 },
+    { ...btc, itv: '5', key: 'BTCUSDT_5m', kind: 'btc', tfLabel: '5분', plain: true, lim: SHOW },
+    ...list.slice(0, COUNT).map(t => ({ ...t, itv: $('itv').value, key: t.symbol, lim: SHOW + 19 }))
+  ];
 }
-async function getKline(sym) {
+async function getKline(sym, itv, lim) {
   if (ex === 'binance') {
-    const k = await (await fetch(`${BN}/klines?symbol=${sym}&interval=${BN_ITV[$('itv').value]}&limit=79`)).json();
+    const k = await (await fetch(`${BN}/klines?symbol=${sym}&interval=${BN_ITV[itv]}&limit=${lim}`)).json();
     return (Array.isArray(k) ? k : []).map(r => ({ t:+r[0], o:+r[1], h:+r[2], l:+r[3], c:+r[4], v:+r[5] }));
   }
-  const j = await (await fetch(`${API}/kline?category=linear&symbol=${sym}&interval=${$('itv').value}&limit=79`)).json();
+  const j = await (await fetch(`${API}/kline?category=linear&symbol=${sym}&interval=${itv}&limit=${lim}`)).json();
   if (j.retCode !== 0) throw new Error(j.retMsg || 'kline error');   // e.g. 10006 rate limit
   return (j.result?.list || []).map(k => ({ t:+k[0], o:+k[1], h:+k[2], l:+k[3], c:+k[4], v:+k[5] })).reverse();
 }
@@ -254,16 +256,16 @@ async function getKline(sym) {
 // In between, the last candle is updated from the ticker price. This keeps requests far below Bybit's rate limit.
 const klineCache = {};
 const wait = ms => new Promise(r => setTimeout(r, ms));
-async function getKlineRetry(sym) {
+async function getKlineRetry(sym, itv, lim) {
   for (let a = 0; a < 4; a++) {
-    try { return await getKline(sym); } catch (e) { await wait(700 * (a + 1)); }
+    try { return await getKline(sym, itv, lim); } catch (e) { await wait(700 * (a + 1)); }
   }
   throw new Error('kline failed');
 }
 async function getKlinesFor(top) {
-  const itv = $('itv').value, now = Date.now();
+  const now = Date.now();
   const need = top.filter(t => {
-    const c = klineCache[t.symbol + '|' + itv];
+    const c = klineCache[t.symbol + '|' + t.itv];
     if (!c || !c.ks.length) return true;
     const ks = c.ks, last = ks[ks.length - 1], step = ks.length > 1 ? ks[1].t - ks[0].t : 60000;
     return now - c.at > 60000 || now >= last.t + step;
@@ -272,23 +274,23 @@ async function getKlinesFor(top) {
   const worker = async () => {
     while (idx < need.length) {
       const t = need[idx++];
-      try { const ks = await getKlineRetry(t.symbol); if (ks.length) klineCache[t.symbol + '|' + itv] = { ks, at: Date.now() }; } catch (e) { /* keep the previous candles */ }
+      try { const ks = await getKlineRetry(t.symbol, t.itv, t.lim); if (ks.length) klineCache[t.symbol + '|' + t.itv] = { ks, at: Date.now() }; } catch (e) { /* keep the previous candles */ }
     }
   };
   await Promise.all([worker(), worker(), worker()]);   // at most 3 requests at a time
   return top.map(t => {
-    const c = klineCache[t.symbol + '|' + itv];
+    const c = klineCache[t.symbol + '|' + t.itv];
     if (!c) return [];
     const last = c.ks[c.ks.length - 1];
     if (last && t.last > 0) { last.c = t.last; last.h = Math.max(last.h, t.last); last.l = Math.min(last.l, t.last); }
-    const shown = c.ks.slice(-60); shown.pre = c.ks.slice(0, -60); return shown;
+    const shown = c.ks.slice(-SHOW); shown.pre = c.ks.slice(0, -SHOW); return shown;
   });
 }
 
 // ---------- chart geometry: price/time <-> pixels ----------
-function geo(cv, ks) {
+function geo(cv, ks, plain) {
   const W = cv.clientWidth, H = cv.clientHeight;
-  const volH = Math.round(Math.min(65, H * 0.195)), padR = 58, chartH = H - volH * 2 - 8, plotW = W - padR;
+  const volH = plain ? 0 : Math.round(Math.min(65, H * 0.195)), padR = 58, chartH = plain ? H : H - volH * 2 - 8, plotW = W - padR;
   const volTop = chartH + 4, volBot = volTop + volH, cciTop = volBot + 4, cciBot = H;
   const hi = Math.max(...ks.map(k => k.h)), lo = Math.min(...ks.map(k => k.l)), rng = (hi - lo) || hi * 0.01 || 1;
   const n = ks.length, cw = plotW / (n + 1), t0 = ks[0].t, step = n > 1 ? ks[1].t - ks[0].t : 60000;
@@ -311,20 +313,21 @@ function drawCard(card) {
     if (!ks.length && W >= 20) { g.fillStyle = '#5e6673'; g.font = '12px sans-serif'; g.textAlign = 'center'; g.fillText('차트 불러오는 중… (10초 뒤 자동 재시도)', W / 2, H / 2); g.textAlign = 'start'; }
     return;
   }
-  const G = card.G = geo(cv, ks);
+  const G = card.G = geo(cv, ks, card.plain);
   const vmax = Math.max(...ks.map(k => k.v)) || 1, bw = Math.max(1, G.cw * 0.65);
   g.strokeStyle = '#2b3139'; g.lineWidth = 1;
-  line(g, 0, G.chartH, G.plotW, G.chartH);   // only the candle / volume separator
+  if (!card.plain) line(g, 0, G.chartH, G.plotW, G.chartH);   // only the candle / volume separator
   ks.forEach((k, i) => {
     const x = i * G.cw + G.cw / 2, up = k.c >= k.o;
     g.strokeStyle = g.fillStyle = up ? '#20b26c' : '#ef454a';
     line(g, x, G.y(k.h), x, G.y(k.l));
     const t = G.y(Math.max(k.o, k.c)), b = G.y(Math.min(k.o, k.c));
     g.fillRect(x - bw / 2, t, bw, Math.max(1, b - t));
-    g.globalAlpha = 0.35; const vh = k.v / vmax * G.volH; g.fillRect(x - bw / 2, G.volBot - vh, bw, vh); g.globalAlpha = 1;
+    if (!card.plain) { g.globalAlpha = 0.35; const vh = k.v / vmax * G.volH; g.fillRect(x - bw / 2, G.volBot - vh, bw, vh); g.globalAlpha = 1; }
   });
-  g.strokeStyle = '#2b3139'; line(g, 0, G.volBot + 2, G.plotW, G.volBot + 2);   // volume / CCI separator
-  drawCCI(g, G, (ks.pre || []).concat(ks));
+  if (!card.plain) { g.strokeStyle = '#2b3139'; line(g, 0, G.volBot + 2, G.plotW, G.volBot + 2);   // volume / CCI separator
+    drawCCI(g, G, (ks.pre || []).concat(ks)); }
+  if (card.ema) drawEMA(g, G, (ks.pre || []).concat(ks), 20);
   // current price: small gray dots
   const last = ks[G.n - 1].c, ly = G.y(last);
   g.setLineDash([1, 3]); g.strokeStyle = COL.last; g.lineWidth = 1;
@@ -359,6 +362,15 @@ function drawCard(card) {
   }
   // eraser button (bottom-left) only while a drawing on this chart is selected
   if (selected && selected.sym === sym && drawings[sym] && drawings[sym][selected.i] && !drag) card.del.style.display = 'block';
+}
+// EMA on close, white line (used on the BTC 1h chart)
+function drawEMA(g, G, all, N) {
+  const off = all.length - G.n, k = 2 / (N + 1); let e = null; const out = [];
+  all.forEach((c, i) => { e = e == null ? c.c : c.c * k + e * (1 - k); out.push(i >= N - 1 ? e : null); });
+  g.save(); g.beginPath(); g.rect(0, 0, G.plotW, G.chartH); g.clip();
+  g.strokeStyle = '#ffffff'; g.lineWidth = 1.4; g.beginPath(); let st = false;
+  out.slice(off).forEach((v, i) => { if (v == null) return; const x = i * G.cw + G.cw / 2, y = G.y(v); if (!st) { g.moveTo(x, y); st = true; } else g.lineTo(x, y); });
+  g.stroke(); g.restore();
 }
 // CCI(20, hlc3) panel: sky-blue line, white dotted +100 / -100
 function drawCCI(g, G, all) {
@@ -560,19 +572,20 @@ async function load() {
     if (pending || drag) { $('status').textContent = '그리는 중이라 갱신 잠시 멈춤'; return; }
     fitGrid();
     const grid = $('grid'); grid.innerHTML = ''; cards = [];
-    if (!top.length && mode === 'fav') grid.innerHTML = '<div id="empty">아직 즐겨찾기가 없어요. 차트 카드의 ☆을 누르면 여기에 모여요.</div>';
+    const btcWrap = document.createElement('div'); btcWrap.className = 'btcwrap'; grid.appendChild(btcWrap);
+    let altRank = 0;
     top.forEach((t, i) => {
       const pc = t.pct * 100, isFav = favs.includes(t.symbol);
-      const isNew = mode !== 'fav' && prevSyms.size && !prevSyms.has(t.symbol);
+      const isNew = t.kind !== 'btc' && prevSyms.size && !prevSyms.has(t.symbol);
       const el = document.createElement('div');
-      el.className = 'card' + (isFav ? ' fav' : '');
+      el.className = 'card' + (isFav ? ' fav' : ''); el.dataset.coin = t.symbol;
       el.innerHTML = `
-        <div class="top"><span class="star${isFav ? ' on' : ''}" title="즐겨찾기">${starSvg(isFav)}</span><span class="rank">${i + 1}</span><span class="sym" title="바이비트에서 열기">${t.symbol.replace(/USDT$/, '')}</span>
+        <div class="top"><span class="star${isFav ? ' on' : ''}" title="즐겨찾기">${starSvg(isFav)}</span>${t.kind === 'btc' ? '<span class="tf">' + t.tfLabel + '</span>' : '<span class="rank">' + (++altRank) + '</span>'}<span class="sym" title="바이비트에서 열기">${t.symbol.replace(/USDT$/, '')}</span>
           ${isNew ? '<span class="new">NEW</span>' : ''}
           <span class="chg ${pc >= 0 ? 'up' : 'dn'}">${pc >= 0 ? '+' : ''}${pc.toFixed(2)}%</span></div>
         <div class="chart"><canvas></canvas><button class="del" title="삭제 (Delete 키)">${ERASER_SVG}</button></div>`;
-      grid.appendChild(el);
-      const card = { sym: t.symbol, cv: el.querySelector('canvas'), del: el.querySelector('.del'), ks: klines[i] };
+      (t.kind === 'btc' ? btcWrap : grid).appendChild(el);
+      const card = { sym: t.key, coin: t.symbol, plain: !!t.plain, ema: !!t.ema, cv: el.querySelector('canvas'), del: el.querySelector('.del'), ks: klines[i] };
       el.querySelector('.sym').onclick = () => openBybit(t.symbol);
       const star = el.querySelector('.star');
       star.onclick = () => toggleFav(t.symbol, star);
@@ -580,7 +593,7 @@ async function load() {
       card.del.onclick = e => { e.stopPropagation(); deleteSelected(); };
       cards.push(card); attachMouse(card); drawCard(card);
     });
-    if (mode !== 'fav') prevSyms = new Set(top.map(t => t.symbol));
+    prevSyms = new Set(top.filter(t => t.kind !== 'btc').map(t => t.symbol));
     $('status').textContent = '마지막 갱신 ' + new Date().toLocaleTimeString('ko-KR');
   } catch (e) {
     if (my === reqId) $('status').textContent = '불러오기 실패, 10초 뒤 재시도';
