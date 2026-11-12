@@ -288,7 +288,7 @@ async function getKlinesFor(top) {
 // ---------- chart geometry: price/time <-> pixels ----------
 function geo(cv, ks) {
   const W = cv.clientWidth, H = cv.clientHeight;
-  const volH = Math.round(Math.min(50, H * 0.15)), padR = 58, chartH = H - volH * 2 - 8, plotW = W - padR;
+  const volH = Math.round(Math.min(65, H * 0.195)), padR = 58, chartH = H - volH * 2 - 8, plotW = W - padR;
   const volTop = chartH + 4, volBot = volTop + volH, cciTop = volBot + 4, cciBot = H;
   const hi = Math.max(...ks.map(k => k.h)), lo = Math.min(...ks.map(k => k.l)), rng = (hi - lo) || hi * 0.01 || 1;
   const n = ks.length, cw = plotW / (n + 1), t0 = ks[0].t, step = n > 1 ? ks[1].t - ks[0].t : 60000;
