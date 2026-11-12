@@ -242,10 +242,10 @@ async function getTop() {
 }
 async function getKline(sym) {
   if (ex === 'binance') {
-    const k = await (await fetch(`${BN}/klines?symbol=${sym}&interval=${BN_ITV[$('itv').value]}&limit=60`)).json();
+    const k = await (await fetch(`${BN}/klines?symbol=${sym}&interval=${BN_ITV[$('itv').value]}&limit=79`)).json();
     return (Array.isArray(k) ? k : []).map(r => ({ t:+r[0], o:+r[1], h:+r[2], l:+r[3], c:+r[4], v:+r[5] }));
   }
-  const j = await (await fetch(`${API}/kline?category=linear&symbol=${sym}&interval=${$('itv').value}&limit=60`)).json();
+  const j = await (await fetch(`${API}/kline?category=linear&symbol=${sym}&interval=${$('itv').value}&limit=79`)).json();
   if (j.retCode !== 0) throw new Error(j.retMsg || 'kline error');   // e.g. 10006 rate limit
   return (j.result?.list || []).map(k => ({ t:+k[0], o:+k[1], h:+k[2], l:+k[3], c:+k[4], v:+k[5] })).reverse();
 }
@@ -281,17 +281,18 @@ async function getKlinesFor(top) {
     if (!c) return [];
     const last = c.ks[c.ks.length - 1];
     if (last && t.last > 0) { last.c = t.last; last.h = Math.max(last.h, t.last); last.l = Math.min(last.l, t.last); }
-    return c.ks;
+    const shown = c.ks.slice(-60); shown.pre = c.ks.slice(0, -60); return shown;
   });
 }
 
 // ---------- chart geometry: price/time <-> pixels ----------
 function geo(cv, ks) {
   const W = cv.clientWidth, H = cv.clientHeight;
-  const volH = Math.min(36, H * 0.15), padR = 58, chartH = H - volH - 4, plotW = W - padR;
+  const volH = Math.round(Math.min(50, H * 0.15)), padR = 58, chartH = H - volH * 2 - 8, plotW = W - padR;
+  const volTop = chartH + 4, volBot = volTop + volH, cciTop = volBot + 4, cciBot = H;
   const hi = Math.max(...ks.map(k => k.h)), lo = Math.min(...ks.map(k => k.l)), rng = (hi - lo) || hi * 0.01 || 1;
   const n = ks.length, cw = plotW / (n + 1), t0 = ks[0].t, step = n > 1 ? ks[1].t - ks[0].t : 60000;
-  return { W, H, volH, padR, chartH, plotW, hi, lo, n, cw,
+  return { W, H, volH, padR, chartH, plotW, hi, lo, n, cw, volTop, volBot, cciTop, cciBot,
     x: t => (t - t0) / step * cw + cw / 2,
     t: x => t0 + (x - cw / 2) / cw * step,
     y: p => 4 + (hi - p) / rng * (chartH - 8),
@@ -320,8 +321,10 @@ function drawCard(card) {
     line(g, x, G.y(k.h), x, G.y(k.l));
     const t = G.y(Math.max(k.o, k.c)), b = G.y(Math.min(k.o, k.c));
     g.fillRect(x - bw / 2, t, bw, Math.max(1, b - t));
-    g.globalAlpha = 0.35; const vh = k.v / vmax * G.volH; g.fillRect(x - bw / 2, H - vh, bw, vh); g.globalAlpha = 1;
+    g.globalAlpha = 0.35; const vh = k.v / vmax * G.volH; g.fillRect(x - bw / 2, G.volBot - vh, bw, vh); g.globalAlpha = 1;
   });
+  g.strokeStyle = '#2b3139'; line(g, 0, G.volBot + 2, G.plotW, G.volBot + 2);   // volume / CCI separator
+  drawCCI(g, G, (ks.pre || []).concat(ks));
   // current price: small gray dots
   const last = ks[G.n - 1].c, ly = G.y(last);
   g.setLineDash([1, 3]); g.strokeStyle = COL.last; g.lineWidth = 1;
@@ -356,6 +359,26 @@ function drawCard(card) {
   }
   // eraser button (bottom-left) only while a drawing on this chart is selected
   if (selected && selected.sym === sym && drawings[sym] && drawings[sym][selected.i] && !drag) card.del.style.display = 'block';
+}
+// CCI(20, hlc3) panel: sky-blue line, white dotted +100 / -100
+function drawCCI(g, G, all) {
+  const N = 20, off = all.length - G.n, tp = all.map(k => (k.h + k.l + k.c) / 3), cci = [];
+  for (let i = 0; i < all.length; i++) {
+    if (i < N - 1) { cci.push(null); continue; }
+    const w = tp.slice(i - N + 1, i + 1), m = w.reduce((a, b) => a + b, 0) / N;
+    const md = w.reduce((a, b) => a + Math.abs(b - m), 0) / N;
+    cci.push(md ? (tp[i] - m) / (0.015 * md) : 0);
+  }
+  const vis = cci.slice(off), mx = Math.max(200, ...vis.filter(v => v != null).map(Math.abs)) * 1.05;
+  const yc = v => G.cciTop + (mx - v) / (2 * mx) * (G.cciBot - G.cciTop - 2);
+  g.save(); g.setLineDash([2, 3]); g.strokeStyle = 'rgba(255,255,255,0.55)'; g.lineWidth = 1;
+  line(g, 0, yc(100), G.plotW, yc(100)); line(g, 0, yc(-100), G.plotW, yc(-100)); g.restore();
+  g.font = '11px sans-serif'; g.fillStyle = '#848e9c'; g.fillText('100', G.plotW + 4, yc(100) + 4); g.fillText('-100', G.plotW + 4, yc(-100) + 4);
+  g.strokeStyle = '#5ac8fa'; g.lineWidth = 1.4; g.beginPath(); let st = false;
+  vis.forEach((v, i) => { if (v == null) return; const x = i * G.cw + G.cw / 2, y = yc(v); if (!st) { g.moveTo(x, y); st = true; } else g.lineTo(x, y); });
+  g.stroke();
+  const lastV = vis[vis.length - 1];
+  if (lastV != null) { g.fillStyle = '#5ac8fa'; g.fillText(lastV.toFixed(0), G.plotW + 30, yc(lastV) + 4); }
 }
 function axisLabel(g, G, p, bg, fg) {
   const y = Math.min(G.chartH - 6, Math.max(6, G.y(p)));
