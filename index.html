@@ -8,7 +8,7 @@
 
 
 <meta charset="UTF-8">
-<title>Bybit 선물 실시간 TOP</title>
+<title>Bybit 선물 실시간 TOP12</title>
 <style>
   :root { --bg:#0b0e11; --card:#161a1e; --line:#2b3139; --txt:#eaecef; --sub:#848e9c; --up:#20b26c; --dn:#ef454a; --acc:#f7a600; --fav:#f0b90b; }
   * { box-sizing:border-box; }
@@ -26,7 +26,7 @@
   button.danger { color:#ef454a; }
   select { background:var(--card); color:var(--txt); border:1px solid var(--line); border-radius:6px; padding:5px 6px; font-size:13px; }
   #status { margin-left:auto; color:var(--sub); }
-  #grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); grid-template-rows:repeat(2,minmax(0,1fr)); gap:8px; padding:8px 10px; height:calc(100vh - var(--hh, 52px)); }
+  #grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); grid-template-rows:repeat(3,minmax(0,1fr)); gap:8px; padding:8px 10px; height:calc(100vh - var(--hh, 52px)); }
   #empty { grid-column:1 / -1; grid-row:1 / -1; display:flex; align-items:center; justify-content:center; color:var(--sub); font-size:15px; }
   .card { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:6px 10px 6px; position:relative; display:flex; flex-direction:column; min-height:0; min-width:0; }
   .card.fav { border-color:var(--fav); }
@@ -79,7 +79,7 @@
 
 <script>
 const API = 'https://api.bybit.com/v5/market';
-const COUNT = 5, SHOW = 50, MIN_TURNOVER = 0, REFRESH_MS = 10000;
+const COUNT = 12, SHOW = 50, MIN_TURNOVER = 0, REFRESH_MS = 10000;
 const STABLE = /^(USDC|USD1|USDE|FDUSD|TUSD|DAI|PYUSD|RLUSD|USDD|USDT|EURC|EUR)USDT$/;
 const FIB_LV = [-3, -2, -1, 0, 1, 2, 3];
 const COL = { line: '#ffb3c7', fib: '#9aa0a6', box: '#a855f7', boxFill: 'rgba(168,85,247,0.16)', last: '#6b7280' };
@@ -231,16 +231,11 @@ async function getTickers() {
 }
 async function getTop() {
   const all = await getTickers();
-  const btc = all.find(t => t.symbol === 'BTCUSDT') || { symbol: 'BTCUSDT', pct: 0, last: 0 };
-  let list = all.filter(t => !STABLE.test(t.symbol) && t.symbol !== 'BTCUSDT' && t.turnover >= MIN_TURNOVER && t.last > 0);
+  let list = all.filter(t => !STABLE.test(t.symbol) && t.turnover >= MIN_TURNOVER && t.last > 0);
   if ($('exMajor').checked) list = list.filter(t => !/^(BTC|ETH)USDT$/.test(t.symbol));
   const key = mode === 'gain' ? (t => -t.pct) : (t => t.pct);
   list.sort((a, b) => key(a) - key(b));
-  return [
-    { ...btc, itv: '60', key: 'BTCUSDT', kind: 'btc', tfLabel: '1시간', ema: true, plain: true, lim: SHOW + 120 },
-    { ...btc, itv: '5', key: 'BTCUSDT_5m', kind: 'btc', tfLabel: '5분', plain: true, lim: SHOW },
-    ...list.slice(0, COUNT).map(t => ({ ...t, itv: $('itv').value, key: t.symbol, lim: SHOW + 19 }))
-  ];
+  return list.slice(0, COUNT).map(t => ({ ...t, itv: $('itv').value, key: t.symbol, plain: true, lim: SHOW }));
 }
 async function getKline(sym, itv, lim) {
   if (ex === 'binance') {
@@ -572,7 +567,6 @@ async function load() {
     if (pending || drag) { $('status').textContent = '그리는 중이라 갱신 잠시 멈춤'; return; }
     fitGrid();
     const grid = $('grid'); grid.innerHTML = ''; cards = [];
-    const btcWrap = document.createElement('div'); btcWrap.className = 'btcwrap'; grid.appendChild(btcWrap);
     let altRank = 0;
     top.forEach((t, i) => {
       const pc = t.pct * 100, isFav = favs.includes(t.symbol);
@@ -584,7 +578,7 @@ async function load() {
           ${isNew ? '<span class="new">NEW</span>' : ''}
           <span class="chg ${pc >= 0 ? 'up' : 'dn'}">${pc >= 0 ? '+' : ''}${pc.toFixed(2)}%</span></div>
         <div class="chart"><canvas></canvas><button class="del" title="삭제 (Delete 키)">${ERASER_SVG}</button></div>`;
-      (t.kind === 'btc' ? btcWrap : grid).appendChild(el);
+      grid.appendChild(el);
       const card = { sym: t.key, coin: t.symbol, plain: !!t.plain, ema: !!t.ema, cv: el.querySelector('canvas'), del: el.querySelector('.del'), ks: klines[i] };
       el.querySelector('.sym').onclick = () => openBybit(t.symbol);
       const star = el.querySelector('.star');
