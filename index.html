@@ -52,6 +52,16 @@
   .del:hover { color:#ff8fa3; border-color:#ff8fa3; }
   .del svg { width:16px; height:16px; display:block; }
   .up { color:var(--up); } .dn { color:var(--dn); }
+  .calc { justify-content:center; gap:4px; }
+  .calc .ct { font-weight:700; font-size:13px; color:var(--sub); }
+  .calc .cb { display:grid; grid-template-columns:minmax(0,1.25fr) minmax(0,1fr); gap:10px; align-items:center; min-height:0; }
+  .calc .ci { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:4px 8px; }
+  .calc label { display:flex; flex-direction:column; font-size:11px; color:var(--sub); gap:2px; min-width:0; }
+  .calc input { width:100%; min-width:0; background:#0b0e11; color:#fff; border:1px solid #474d57; border-radius:5px; padding:3px 6px; font-size:14px; font-weight:700; text-align:right; font-family:inherit; }
+  .calc input:focus { outline:none; border-color:var(--acc); }
+  .calc .cr { background:#1e2a3d; border:1px solid #2f4a75; border-radius:8px; padding:6px 10px; text-align:right; min-width:0; }
+  .calc .cr .rl { font-size:11px; color:var(--sub); text-align:left; }
+  .calc .cr .rv { font-size:clamp(16px,2.2vw,24px); font-weight:800; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 </style>
 </head>
 <body>
@@ -82,7 +92,7 @@
 
 <script>
 const API = 'https://api.bybit.com/v5/market';
-const COUNT = 12, SHOW = 50, MIN_TURNOVER = 0, REFRESH_MS = 60000;
+const COUNT = 11, SHOW = 50, MIN_TURNOVER = 0, REFRESH_MS = 60000;
 const STABLE = /^(USDC|USD1|USDE|FDUSD|TUSD|DAI|PYUSD|RLUSD|USDD|USDT|EURC|EUR)USDT$/;
 const FIB_LV = [-3, -2, -1, 0, 1, 2, 3];
 const COL = { line: '#ffb3c7', fib: '#9aa0a6', box: '#a855f7', boxFill: 'rgba(168,85,247,0.16)', last: '#6b7280' };
@@ -568,7 +578,8 @@ async function load() {
     if (my !== reqId) return;
     if (pending || drag) { $('status').textContent = '그리는 중이라 갱신 잠시 멈춤'; return; }
     fitGrid();
-    const grid = $('grid'); grid.innerHTML = ''; cards = [];
+    const grid = $('grid'); grid.querySelectorAll('.card:not(.calc), #empty').forEach(e => e.remove()); cards = [];
+    const calcEl = ensureCalc();
     let altRank = 0;
     top.forEach((t, i) => {
       const pc = t.pct * 100, isFav = favs.includes(t.symbol);
@@ -580,7 +591,7 @@ async function load() {
           ${isNew ? '<span class="new">NEW</span>' : ''}
           <span class="chg ${pc >= 0 ? 'up' : 'dn'}">${pc >= 0 ? '+' : ''}${pc.toFixed(2)}%</span></div>
         <div class="chart"><canvas></canvas><button class="del" title="삭제 (Delete 키)">${ERASER_SVG}</button></div>`;
-      grid.appendChild(el);
+      grid.insertBefore(el, calcEl);
       const card = { sym: t.key, coin: t.symbol, plain: !!t.plain, ema: !!t.ema, cv: el.querySelector('canvas'), del: el.querySelector('.del'), ks: klines[i] };
       el.querySelector('.sym').onclick = () => openBybit(t.symbol);
       const star = el.querySelector('.star');
@@ -604,7 +615,35 @@ function scheduleMinute() {
   const ms = 60000 - (Date.now() % 60000) + 300;   // just after hh:mm:00
   setTimeout(() => { load(); scheduleMinute(); }, ms);
 }
-fitGrid(); load(); scheduleMinute();
+// ---------- slot 12: fixed stop-loss calculator (does not change with ranking) ----------
+const CALC_KEY = 'calcV1';
+const CALC_DEF = { sl: 20000, pct: 0.5, lev: 10, fx: 1336 };
+function ensureCalc() {
+  let el = document.getElementById('calcCard');
+  if (el) return el;
+  const v = Object.assign({}, CALC_DEF, JSON.parse(localStorage.getItem(CALC_KEY) || '{}'));
+  el = document.createElement('div'); el.id = 'calcCard'; el.className = 'card calc';
+  el.innerHTML = '<div class="ct">손절 계산기</div><div class="cb"><div class="ci">'
+    + '<label>손절금액 (원)<input id="cSl" inputmode="numeric" value="' + v.sl.toLocaleString('ko-KR') + '"></label>'
+    + '<label>손절폭 (%)<input id="cPct" inputmode="decimal" value="' + v.pct + '"></label>'
+    + '<label>레버리지 (배)<input id="cLev" inputmode="decimal" value="' + v.lev + '"></label>'
+    + '<label>환율 (원/USDT)<input id="cFx" inputmode="decimal" value="' + v.fx + '"></label>'
+    + '</div><div class="cr"><div class="rl">바이낸스 입력값 (USDT)</div><div class="rv" id="cOut">-</div></div></div>';
+  $('grid').appendChild(el);
+  const num = id => parseFloat(String($(id).value).replace(/,/g, ''));
+  const calc = () => {
+    const sl = num('cSl'), pct = num('cPct'), lev = num('cLev'), fx = num('cFx');
+    const out = (sl > 0 && pct > 0 && fx > 0) ? sl / (pct / 100) / fx : 0;
+    $('cOut').textContent = out ? out.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-';
+    localStorage.setItem(CALC_KEY, JSON.stringify({ sl: sl || 0, pct: pct || 0, lev: lev || 0, fx: fx || 0 }));
+  };
+  ['cSl','cPct','cLev','cFx'].forEach(id => $(id).addEventListener('input', calc));
+  $('cSl').addEventListener('blur', () => { const n = num('cSl'); if (n > 0) $('cSl').value = n.toLocaleString('ko-KR'); });
+  el.addEventListener('keydown', e => e.stopPropagation());   // typing here never triggers chart shortcuts
+  calc();
+  return el;
+}
+fitGrid(); ensureCalc(); load(); scheduleMinute();
 </script>
 </body>
 </html>
