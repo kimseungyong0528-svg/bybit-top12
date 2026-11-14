@@ -98,7 +98,7 @@
     <button class="tool" data-tool="rect" title="박스 (한 꼭짓점 클릭, 반대 꼭짓점 클릭)"><svg viewBox="0 0 24 24"><path d="M7.2 5h9.6M7.2 19h9.6M5 7.2v9.6M19 7.2v9.6"/><circle cx="5" cy="5" r="2.2"/><circle cx="19" cy="5" r="2.2"/><circle cx="5" cy="19" r="2.2"/><circle cx="19" cy="19" r="2.2"/></svg></button>
     <button class="tool" data-tool="hline" title="수평선 (한 번 클릭)"><svg viewBox="0 0 24 24"><path d="M3 12h6.8M14.2 12H21"/><circle cx="12" cy="12" r="2.2"/></svg></button>
     <button class="tool" data-tool="trend" title="추세선 (시작점 클릭, 끝점 클릭)"><svg viewBox="0 0 24 24"><path d="M6.6 17.4L17.4 6.6"/><circle cx="5" cy="19" r="2.2"/><circle cx="19" cy="5" r="2.2"/></svg></button>
-    <button id="clearAll" class="danger" title="모든 코인의 그림 삭제">전체삭제</button>
+    <button id="clearAll" class="danger" title="지금 화면에 보이는 차트의 그림만 삭제">전체삭제</button>
   </div>
   <span id="status">불러오는 중...</span>
 </header>
@@ -185,8 +185,10 @@ function setTool(t) {
 }
 document.querySelectorAll('[data-tool]').forEach(b => b.onclick = () => setTool(b.dataset.tool));
 $('clearAll').onclick = () => {
-  if (!confirm('모든 코인에 그린 그림을 전부 지울까요? (Ctrl+Z로 되돌릴 수 있어요)')) return;
-  pushUndo(); drawings = {}; selected = null; saveDraw(); redrawAll();
+  const shown = cards.map(c => c.sym).filter(s => drawings[s] && drawings[s].length);
+  if (!shown.length) return;
+  if (!confirm('지금 화면에 보이는 차트 ' + shown.length + '개의 그림만 지울까요? (다른 화면 그림은 그대로, Ctrl+Z로 되돌릴 수 있어요)')) return;
+  pushUndo(); shown.forEach(s => delete drawings[s]); selected = null; saveDraw(); redrawAll();
 };
 function deleteSelected() {
   if (!selected || !drawings[selected.sym] || !drawings[selected.sym][selected.i]) return;
