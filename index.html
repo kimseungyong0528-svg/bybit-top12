@@ -54,22 +54,29 @@
   .up { color:var(--up); } .dn { color:var(--dn); }
   .calc { padding:0; container-type:size; }
   .c1 { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:12px; padding:10px 14px; align-items:center; height:100%; }
-  .c1 .t { font-size:12px; color:#848e9c; font-weight:700; margin-bottom:6px; }
   .c1 .ins { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; }
   .c1 label { font-size:11px; color:#848e9c; display:flex; flex-direction:column; gap:3px; min-width:0; }
+  .c1 label .ls { display:none; }
   .c1 input { width:100%; min-width:0; background:#0b0e11; border:1px solid #3a404a; border-radius:6px; padding:5px 8px; font-size:15px; font-weight:700; color:#fff; text-align:right; font-family:inherit; }
   .c1 input:focus { outline:none; border-color:#f0b90b; }
-  .c1 .res { background:#f0b90b; color:#000; border-radius:10px; padding:8px 16px; text-align:right; min-width:200px; }
-  .c1 .res .l { font-size:11px; font-weight:700; opacity:.75; text-align:left; }
+  .c1 .res { background:#f0b90b; color:#000; border-radius:10px; padding:8px 16px; text-align:right; min-width:190px; }
+  .c1 .res .l { font-size:11px; font-weight:700; opacity:.75; text-align:left; white-space:nowrap; }
   .c1 .res .v { font-size:30px; font-weight:900; letter-spacing:-.02em; white-space:nowrap; }
-  @container (max-width: 520px) {
-    .c1 { grid-template-columns:1fr; gap:5px; padding:6px 12px; }
-    .c1 .t { margin-bottom:3px; }
-    .c1 .ins { grid-template-columns:repeat(2,minmax(0,1fr)); gap:5px 8px; }
-    .c1 label { gap:1px; }
-    .c1 input { padding:2px 8px; font-size:14px; }
-    .c1 .res { display:flex; justify-content:space-between; align-items:center; padding:3px 12px; min-width:0; }
-    .c1 .res .v { font-size:22px; }
+  /* narrow cells (tablet portrait etc.): 2x2 inputs with the label beside the box, result bar below */
+  @container (max-width: 560px) {
+    .c1 { grid-template-columns:1fr; grid-template-rows:minmax(0,1fr) auto; gap:6px; padding:8px 10px; align-content:stretch; }
+    .c1 .ins { grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px 8px; align-content:center; }
+    .c1 label { flex-direction:row; align-items:center; gap:6px; white-space:nowrap; }
+    .c1 label .lf { display:none; } .c1 label .ls { display:inline; flex:none; }
+    .c1 input { padding:3px 6px; font-size:14px; }
+    .c1 .res { display:flex; justify-content:space-between; align-items:center; gap:8px; padding:4px 10px; min-width:0; border-radius:8px; }
+    .c1 .res .v { font-size:clamp(17px, 15cqh, 22px); }
+  }
+  @container (max-width: 300px) {
+    .c1 { padding:6px 7px; } .c1 .ins { gap:5px 6px; } .c1 label { font-size:10px; gap:4px; } .c1 input { font-size:12.5px; padding:2px 4px; } .c1 .res { padding:3px 8px; } .c1 .res .l { font-size:10px; }
+  }
+  @container (max-width: 560px) and (max-height: 120px) {
+    .c1 { padding:5px 8px; gap:4px; } .c1 .ins { gap:4px 8px; } .c1 input { padding:1px 6px; font-size:13px; } .c1 .res { padding:2px 10px; } .c1 .res .l { font-size:10px; }
   }
 </style>
 </head>
@@ -630,12 +637,12 @@ function ensureCalc() {
   if (el) return el;
   const v = Object.assign({}, CALC_DEF, JSON.parse(localStorage.getItem(CALC_KEY) || '{}'));
   el = document.createElement('div'); el.id = 'calcCard'; el.className = 'card calc';
-  el.innerHTML = '<div class="c1"><div><div class="t">손절 계산기</div><div class="ins">'
-    + '<label>손절금액 (원)<input id="cSl" inputmode="numeric" value="' + v.sl.toLocaleString('ko-KR') + '"></label>'
-    + '<label>손절폭 (%)<input id="cPct" inputmode="decimal" value="' + v.pct + '"></label>'
-    + '<label>레버리지 (배)<input id="cLev" inputmode="decimal" value="' + v.lev + '"></label>'
-    + '<label>환율 (원/USDT)<input id="cFx" inputmode="decimal" value="' + v.fx + '"></label>'
-    + '</div></div><div class="res"><div class="l">바이낸스 입력값 USDT</div><div class="v" id="cOut">-</div></div></div>';
+  el.innerHTML = '<div class="c1"><div class="ins">'
+    + '<label><span class="lf">손절금액 (원)</span><span class="ls">손절금액</span><input id="cSl" inputmode="numeric" value="' + v.sl.toLocaleString('ko-KR') + '"></label>'
+    + '<label><span class="lf">손절폭 (%)</span><span class="ls">손절폭%</span><input id="cPct" inputmode="decimal" value="' + v.pct + '"></label>'
+    + '<label><span class="lf">레버리지 (배)</span><span class="ls">레버리지</span><input id="cLev" inputmode="decimal" value="' + v.lev + '"></label>'
+    + '<label><span class="lf">환율 (원/USDT)</span><span class="ls">환율</span><input id="cFx" inputmode="decimal" value="' + v.fx + '"></label>'
+    + '</div><div class="res"><div class="l">바이낸스 입력값 USDT</div><div class="v" id="cOut">-</div></div></div>';
   $('grid').appendChild(el);
   const num = id => parseFloat(String($(id).value).replace(/,/g, ''));
   const calc = () => {
