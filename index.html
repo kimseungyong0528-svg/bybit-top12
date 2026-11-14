@@ -8,7 +8,7 @@
 
 
 <meta charset="UTF-8">
-<title>Bybit 선물 실시간 TOP12</title>
+<title>Binance 선물 실시간 TOP12</title>
 <style>
   :root { --bg:#0b0e11; --card:#161a1e; --line:#2b3139; --txt:#eaecef; --sub:#848e9c; --up:#20b26c; --dn:#ef454a; --acc:#f7a600; --fav:#f0b90b; }
   * { box-sizing:border-box; }
@@ -81,7 +81,7 @@
 
 <script>
 const API = 'https://api.bybit.com/v5/market';
-const COUNT = 12, SHOW = 50, MIN_TURNOVER = 0, REFRESH_MS = 10000;
+const COUNT = 12, SHOW = 50, MIN_TURNOVER = 0, REFRESH_MS = 60000;
 const STABLE = /^(USDC|USD1|USDE|FDUSD|TUSD|DAI|PYUSD|RLUSD|USDD|USDT|EURC|EUR)USDT$/;
 const FIB_LV = [-3, -2, -1, 0, 1, 2, 3];
 const COL = { line: '#ffb3c7', fib: '#9aa0a6', box: '#a855f7', boxFill: 'rgba(168,85,247,0.16)', last: '#6b7280' };
@@ -89,7 +89,7 @@ const ERASER_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" s
 
 const $ = id => document.getElementById(id);
 const S = JSON.parse(localStorage.getItem('bbTop12v4') || '{}');
-let mode = (S.mode === 'gain' || S.mode === 'lose') ? S.mode : 'gain', ex = 'bybit';
+let mode = (S.mode === 'gain' || S.mode === 'lose') ? S.mode : 'gain', ex = 'binance';
 let byInfo = null, byInfoAt = 0;
 const BN = 'https://fapi.binance.com/fapi/v1', BN_ITV = { '5': '5m', '15': '15m', '60': '1h', '240': '4h', 'D': '1d' };
 let bnInfo = null, bnInfoAt = 0;
@@ -196,11 +196,7 @@ function starSvg(on) {
 // With the '대시보드 → 바이비트 연결' extension installed: go to the already-open Bybit tab, switch coin + timeframe
 // (new window only if Bybit is not open). Without it: reuse the tab this dashboard opened before.
 function openBybit(sym) {
-  if (document.documentElement.dataset.bybitLink === '1') {
-    window.postMessage({ type: 'BYBIT_OPEN', sym, iv: $('itv').value }, '*');
-    return;
-  }
-  const w = window.open('https://www.bybit.com/trade/usdt/' + sym, 'bybitFromDashboard');
+  const w = window.open('https://www.binance.com/ko/futures/' + sym, 'binanceFromDashboard');
   if (w) { try { w.focus(); } catch (e) {} }
 }
 function fmtUsd(v) { if (v >= 1e9) return '$' + (v/1e9).toFixed(2) + 'B'; if (v >= 1e6) return '$' + (v/1e6).toFixed(1) + 'M'; return '$' + (v/1e3).toFixed(0) + 'K'; }
@@ -211,7 +207,7 @@ async function getTickers() {
   if (ex === 'binance') {
     if (!bnInfo || Date.now() - bnInfoAt > 30 * 60 * 1000) {   // tradable USDT perpetuals, refreshed every 30 min
       const ei = await (await fetch(`${BN}/exchangeInfo`)).json();
-      bnInfo = new Set(ei.symbols.filter(s => s.status === 'TRADING' && s.contractType === 'PERPETUAL' && s.quoteAsset === 'USDT' && s.underlyingType !== 'PREMARKET').map(s => s.symbol));
+      bnInfo = new Set(ei.symbols.filter(s => s.status === 'TRADING' && s.contractType === 'PERPETUAL' && s.quoteAsset === 'USDT' && s.underlyingType === 'COIN').map(s => s.symbol));
       bnInfoAt = Date.now();
     }
     const t = await (await fetch(`${BN}/ticker/24hr`)).json();
@@ -263,9 +259,7 @@ async function getKlinesFor(top) {
   const now = Date.now();
   const need = top.filter(t => {
     const c = klineCache[t.symbol + '|' + t.itv];
-    if (!c || !c.ks.length) return true;
-    const ks = c.ks, last = ks[ks.length - 1], step = ks.length > 1 ? ks[1].t - ks[0].t : 60000;
-    return now - c.at > 60000 || now >= last.t + step;
+    return true;   // refresh is once a minute, so always re-download the candles
   });
   let idx = 0;
   const worker = async () => {
@@ -307,7 +301,7 @@ function drawCard(card) {
   g.clearRect(0, 0, W, H);
   card.del.style.display = 'none';
   if (!ks.length || W < 20 || H < 20) {
-    if (!ks.length && W >= 20) { g.fillStyle = '#5e6673'; g.font = '12px sans-serif'; g.textAlign = 'center'; g.fillText('차트 불러오는 중… (10초 뒤 자동 재시도)', W / 2, H / 2); g.textAlign = 'start'; }
+    if (!ks.length && W >= 20) { g.fillStyle = '#5e6673'; g.font = '12px sans-serif'; g.textAlign = 'center'; g.fillText('차트 불러오는 중… (다음 정각 분에 재시도)', W / 2, H / 2); g.textAlign = 'start'; }
     return;
   }
   const G = card.G = geo(cv, ks, card.plain);
@@ -576,7 +570,7 @@ async function load() {
       const el = document.createElement('div');
       el.className = 'card' + (isFav ? ' fav' : ''); el.dataset.coin = t.symbol;
       el.innerHTML = `
-        <div class="top"><span class="star${isFav ? ' on' : ''}" title="즐겨찾기">${starSvg(isFav)}</span>${t.kind === 'btc' ? '<span class="tf">' + t.tfLabel + '</span>' : '<span class="rank">' + (++altRank) + '</span>'}<span class="sym" title="바이비트에서 열기">${t.symbol.replace(/USDT$/, '')}</span>
+        <div class="top"><span class="star${isFav ? ' on' : ''}" title="즐겨찾기">${starSvg(isFav)}</span>${t.kind === 'btc' ? '<span class="tf">' + t.tfLabel + '</span>' : '<span class="rank">' + (++altRank) + '</span>'}<span class="sym" title="바이낸스에서 열기">${t.symbol.replace(/USDT$/, '')}</span>
           ${isNew ? '<span class="new">NEW</span>' : ''}
           <span class="chg ${pc >= 0 ? 'up' : 'dn'}">${pc >= 0 ? '+' : ''}${pc.toFixed(2)}%</span></div>
         <div class="chart"><canvas></canvas><button class="del" title="삭제 (Delete 키)">${ERASER_SVG}</button></div>`;
@@ -592,13 +586,17 @@ async function load() {
     prevSyms = new Set(top.filter(t => t.kind !== 'btc').map(t => t.symbol));
     $('status').textContent = '마지막 갱신 ' + new Date().toLocaleTimeString('ko-KR');
   } catch (e) {
-    if (my === reqId) $('status').textContent = '불러오기 실패, 10초 뒤 재시도';
+    if (my === reqId) $('status').textContent = '불러오기 실패, 다음 정각 분에 재시도';
   }
 }
 window.addEventListener('resize', () => { fitGrid(); redrawAll(); });
 document.querySelectorAll('[data-mode]').forEach(x => x.classList.toggle('on', x.dataset.mode === mode));
 document.querySelectorAll('[data-ex]').forEach(x => x.classList.toggle('on', x.dataset.ex === ex));
-fitGrid(); load(); setInterval(load, REFRESH_MS);
+function scheduleMinute() {
+  const ms = 60000 - (Date.now() % 60000) + 300;   // just after hh:mm:00
+  setTimeout(() => { load(); scheduleMinute(); }, ms);
+}
+fitGrid(); load(); scheduleMinute();
 </script>
 </body>
 </html>
