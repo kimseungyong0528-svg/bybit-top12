@@ -263,7 +263,7 @@ async function getTop() {
   if ($('exMajor').checked) list = list.filter(t => !/^(BTC|ETH)USDT$/.test(t.symbol));
   const key = mode === 'gain' ? (t => -t.pct) : (t => t.pct);
   list.sort((a, b) => key(a) - key(b));
-  return list.slice(0, COUNT).map(t => ({ ...t, itv: $('itv').value, key: t.symbol, plain: true, lim: SHOW }));
+  return list.slice(0, COUNT).map(t => ({ ...t, itv: $('itv').value, key: t.symbol, plain: true, lim: SHOW + 30 }));
 }
 async function getKline(sym, itv, lim) {
   if (ex === 'binance') {
@@ -304,14 +304,14 @@ async function getKlinesFor(top) {
     if (!c) return [];
     const last = c.ks[c.ks.length - 1];
     if (last && t.last > 0) { last.c = t.last; last.h = Math.max(last.h, t.last); last.l = Math.min(last.l, t.last); }
-    const shown = c.ks.slice(-SHOW); shown.pre = c.ks.slice(0, -SHOW); return shown;
+    const shown = c.ks.slice(-(SHOW + 30)); shown.pre = c.ks.slice(0, -SHOW); return shown;
   });
 }
 
 // ---------- chart geometry: price/time <-> pixels ----------
 function geo(cv, ks, plain) {
   const W = cv.clientWidth, H = cv.clientHeight;
-  const volH = plain ? 0 : Math.round(Math.min(65, H * 0.195)), padR = 58, chartH = plain ? H : H - volH * 2 - 8, plotW = W - padR;
+  const volH = plain ? 0 : Math.round(Math.min(65, H * 0.195)), padR = 0, chartH = plain ? H : H - volH * 2 - 8, plotW = W - padR;
   const volTop = chartH + 4, volBot = volTop + volH, cciTop = volBot + 4, cciBot = H;
   const hi = Math.max(...ks.map(k => k.h)), lo = Math.min(...ks.map(k => k.l)), rng = (hi - lo) || hi * 0.01 || 1;
   const n = ks.length, cw = plotW / (n + 1), t0 = ks[0].t, step = n > 1 ? ks[1].t - ks[0].t : 60000;
@@ -323,9 +323,11 @@ function geo(cv, ks, plain) {
 }
 
 function drawCard(card) {
-  const { cv, ks, sym } = card;
+  let { cv, ks, sym } = card;
   const dpr = window.devicePixelRatio || 1;
   const W = cv.clientWidth, H = cv.clientHeight;
+  // the old 58px price-label strip is now filled with candles at the same candle width
+  if (ks.length && W > 60) ks = ks.slice(-Math.min(ks.length, Math.round(SHOW * W / (W - 58))));
   cv.width = W * dpr; cv.height = H * dpr;
   const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
   g.clearRect(0, 0, W, H);
@@ -354,8 +356,8 @@ function drawCard(card) {
   g.setLineDash([1, 3]); g.strokeStyle = COL.last; g.lineWidth = 1;
   line(g, 0, ly, G.plotW, ly); g.setLineDash([]);
   g.font = '12px sans-serif'; g.fillStyle = '#848e9c';
-  g.fillText(fmtPx(G.hi), G.plotW + 4, 12);
-  g.fillText(fmtPx(G.lo), G.plotW + 4, G.chartH - 2);
+  
+  
   // user drawings
   const list = (drawings[sym] || []).map((d, i) => ({ ...d, sel: selected && selected.sym === sym && selected.i === i }));
   if (pending && pending.sym === sym && pending.m) {
@@ -414,6 +416,8 @@ function drawCCI(g, G, all) {
   if (lastV != null) { g.fillStyle = '#5ac8fa'; g.fillText(lastV.toFixed(0), G.plotW + 30, yc(lastV) + 4); }
 }
 function axisLabel(g, G, p, bg, fg) {
+  return;   // right-side price labels removed
+
   const y = Math.min(G.chartH - 6, Math.max(6, G.y(p)));
   g.fillStyle = bg; g.fillRect(G.plotW + 1, y - 7, G.padR - 1, 14);
   g.fillStyle = fg; g.font = '12px sans-serif'; g.fillText(fmtPx(p), G.plotW + 4, y + 4);
