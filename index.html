@@ -19,6 +19,8 @@
   .sep { width:1px; height:24px; background:var(--line); }
   button { background:var(--card); color:var(--txt); border:1px solid var(--line); border-radius:6px; padding:6px 10px; cursor:pointer; font-size:13px; }
   button.on { background:var(--acc); color:#000; border-color:var(--acc); font-weight:700; }
+  button[data-mode="gain"].on { background:var(--up); border-color:var(--up); color:#fff; }
+  button[data-mode="lose"].on { background:var(--dn); border-color:var(--dn); color:#fff; }
   button.tool { padding:3px 6px; color:#b7bdc6; display:inline-flex; align-items:center; }
   button.tool svg { width:22px; height:22px; display:block; fill:none; stroke:currentColor; stroke-width:1.5; stroke-linecap:round; }
   button.tool:hover { color:#fff; }
