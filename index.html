@@ -22,6 +22,10 @@
   button.on { background:var(--acc); color:#000; border-color:var(--acc); font-weight:700; }
   button[data-mode="gain"].on { background:var(--up); border-color:var(--up); color:#fff; }
   button[data-mode="lose"].on { background:var(--dn); border-color:var(--dn); color:#fff; }
+  button[data-pg] { min-width:34px; font-weight:700; }
+  button[data-pg].g { color:var(--up); } button[data-pg].r { color:var(--dn); }
+  button[data-pg].g.on { background:var(--up); border-color:var(--up); color:#fff; }
+  button[data-pg].r.on { background:var(--dn); border-color:var(--dn); color:#fff; }
   button.tool { padding:3px 6px; color:#b7bdc6; display:inline-flex; align-items:center; }
   button.tool svg { width:22px; height:22px; display:block; fill:none; stroke:currentColor; stroke-width:1.5; stroke-linecap:round; }
   button.tool:hover { color:#fff; }
@@ -85,13 +89,11 @@
 </head>
 <body>
 <header>
-  <div class="grp"><span class="lbl">순위</span>
-    <button data-mode="gain" class="on">24h 상승 TOP</button>
-    <button data-mode="lose">24h 하락 TOP</button>
-  </div>
   <div class="grp"><span class="lbl">페이지</span>
-    <button data-pg="1" title="1~4위">1</button>
-    <button data-pg="2" title="5~8위">2</button>
+    <button data-pg="1" class="g" title="24h 상승 1~4위">1</button>
+    <button data-pg="2" class="g" title="24h 상승 5~8위">2</button>
+    <button data-pg="3" class="r" title="24h 하락 1~4위">3</button>
+    <button data-pg="4" class="r" title="24h 하락 5~8위">4</button>
   </div>
   <div class="grp"><span class="lbl">차트</span>
     <select id="itv">
@@ -122,7 +124,7 @@ const ERASER_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" s
 const $ = id => document.getElementById(id);
 const S = JSON.parse(localStorage.getItem('bbTop12v4') || '{}');
 let mode = (S.mode === 'gain' || S.mode === 'lose') ? S.mode : 'gain', ex = 'binance';
-const PER_PAGE = 4; let pg = S.pg === 2 ? 2 : 1, lastTop = null, lastK = null;
+const PER_PAGE = 4; let pg = [1, 2, 3, 4].includes(S.pg) ? S.pg : 1, lastTop = null, lastK = null;
 let byInfo = null, byInfoAt = 0;
 const BN = 'https://fapi.binance.com/fapi/v1', BN_ITV = { '5': '5m', '15': '15m', '60': '1h', '240': '4h', 'D': '1d' };
 let bnInfo = null, bnInfoAt = 0;
@@ -271,9 +273,10 @@ async function getTop() {
   const all = await getTickers();
   let list = all.filter(t => !STABLE.test(t.symbol) && t.turnover >= MIN_TURNOVER && t.last > 0);
   if ($('exMajor').checked) list = list.filter(t => !/^(BTC|ETH)USDT$/.test(t.symbol));
-  const key = mode === 'gain' ? (t => -t.pct) : (t => t.pct);
-  list.sort((a, b) => key(a) - key(b));
-  return list.slice(0, COUNT).map(t => ({ ...t, itv: $('itv').value, key: t.symbol, plain: true, lim: SHOW + 30 }));
+  // 16 coins: gainers 1-8 (pages 1-2), then losers 1-8 (pages 3-4)
+  const mk = (arr, side) => arr.slice(0, COUNT).map((t, r) => ({ ...t, side, rank: r + 1, itv: $('itv').value, key: t.symbol, plain: true, lim: SHOW + 30 }));
+  const gain = mk([...list].sort((a, b) => b.pct - a.pct), 'gain'), lose = mk([...list].sort((a, b) => a.pct - b.pct), 'lose');
+  return gain.concat(lose);
 }
 async function getKline(sym, itv, lim) {
   if (ex === 'binance') {
@@ -628,7 +631,7 @@ function renderCards() {
       const el = document.createElement('div');
       el.className = 'card' + (isFav ? ' fav' : ''); el.dataset.coin = t.symbol;
       el.innerHTML = `
-        <div class="top"><span class="star${isFav ? ' on' : ''}" title="즐겨찾기">${starSvg(isFav)}</span>${t.kind === 'btc' ? '<span class="tf">' + t.tfLabel + '</span>' : '<span class="rank">' + (i + 1) + '</span>'}<span class="sym" title="바이낸스에서 열기">${t.symbol.replace(/USDT$/, '')}</span>
+        <div class="top"><span class="star${isFav ? ' on' : ''}" title="즐겨찾기">${starSvg(isFav)}</span>${t.kind === 'btc' ? '<span class="tf">' + t.tfLabel + '</span>' : '<span class="rank">' + (t.rank || i + 1) + '</span>'}<span class="sym" title="바이낸스에서 열기">${t.symbol.replace(/USDT$/, '')}</span>
           ${isNew ? '<span class="new">NEW</span>' : ''}
           <span class="chg ${pc >= 0 ? 'up' : 'dn'}">${pc >= 0 ? '+' : ''}${pc.toFixed(2)}%</span></div>
         <div class="chart"><canvas></canvas><button class="del" title="삭제 (Delete 키)">${ERASER_SVG}</button></div>`;
