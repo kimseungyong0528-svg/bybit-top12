@@ -29,7 +29,7 @@
   button.danger { color:#ef454a; }
   select { background:var(--card); color:var(--txt); border:1px solid var(--line); border-radius:6px; padding:5px 6px; font-size:13px; }
   #status { margin-left:auto; color:var(--sub); }
-  #grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); grid-template-rows:repeat(4,minmax(0,1fr)) 150px; gap:8px; padding:8px 10px calc(8px + env(safe-area-inset-bottom, 0px)); height:calc(100vh - var(--hh, 52px)); height:calc(100dvh - var(--hh, 52px)); }
+  #grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); grid-template-rows:repeat(2,minmax(0,1fr)) 150px; gap:8px; padding:8px 10px calc(8px + env(safe-area-inset-bottom, 0px)); height:calc(100vh - var(--hh, 52px)); height:calc(100dvh - var(--hh, 52px)); }
   #empty { grid-column:1 / -1; grid-row:1 / -1; display:flex; align-items:center; justify-content:center; color:var(--sub); font-size:15px; }
   .card { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:6px 10px 6px; position:relative; display:flex; flex-direction:column; min-height:0; min-width:0; }
   .card.fav { border-color:var(--fav); }
@@ -89,6 +89,10 @@
     <button data-mode="gain" class="on">24h 상승 TOP</button>
     <button data-mode="lose">24h 하락 TOP</button>
   </div>
+  <div class="grp"><span class="lbl">페이지</span>
+    <button data-pg="1" title="1~4위">1</button>
+    <button data-pg="2" title="5~8위">2</button>
+  </div>
   <div class="grp"><span class="lbl">차트</span>
     <select id="itv">
       <option value="5">5분</option><option value="15" selected>15분</option><option value="60">1시간</option><option value="240">4시간</option><option value="D">일봉</option>
@@ -118,6 +122,7 @@ const ERASER_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" s
 const $ = id => document.getElementById(id);
 const S = JSON.parse(localStorage.getItem('bbTop12v4') || '{}');
 let mode = (S.mode === 'gain' || S.mode === 'lose') ? S.mode : 'gain', ex = 'binance';
+const PER_PAGE = 4; let pg = S.pg === 2 ? 2 : 1, lastTop = null, lastK = null;
 let byInfo = null, byInfoAt = 0;
 const BN = 'https://fapi.binance.com/fapi/v1', BN_ITV = { '5': '5m', '15': '15m', '60': '1h', '240': '4h', 'D': '1d' };
 let bnInfo = null, bnInfoAt = 0;
@@ -154,7 +159,7 @@ function paste() {
   saveDraw(); redrawAll();
 }
 
-function save() { localStorage.setItem('bbTop12v4', JSON.stringify({ mode, ex, itv:$('itv').value, exMajor:$('exMajor').checked })); }
+function save() { localStorage.setItem('bbTop12v4', JSON.stringify({ mode, ex, pg, itv:$('itv').value, exMajor:$('exMajor').checked })); }
 function saveDraw() { localStorage.setItem('bbDraw', JSON.stringify(drawings)); }
 function saveFav() { localStorage.setItem('bbFav', JSON.stringify(favs)); }
 function fitGrid() {
@@ -600,17 +605,30 @@ async function load() {
     const klines = await getKlinesFor(top);
     if (my !== reqId) return;
     if (pending || drag) { $('status').textContent = '그리는 중이라 갱신 잠시 멈춤'; return; }
+    lastTop = top; lastK = klines;
+    renderCards();
+    prevSyms = new Set(top.filter(t => t.kind !== 'btc').map(t => t.symbol));
+    $('status').textContent = '마지막 갱신 ' + new Date().toLocaleTimeString('ko-KR');
+  } catch (e) {
+    if (my === reqId) $('status').textContent = '불러오기 실패, 다음 정각 분에 재시도';
+  }
+}
+// page 1 = ranks 1-4, page 2 = ranks 5-8 (switching pages re-uses the last data, no refetch)
+function renderCards() {
+  if (!lastTop) return;
+  const top = lastTop, klines = lastK;
     fitGrid();
     const grid = $('grid'); grid.querySelectorAll('.card:not(.calc), #empty').forEach(e => e.remove()); cards = [];
     const calcEl = ensureCalc();
-    let altRank = 0;
+    const from = (pg - 1) * PER_PAGE;
     top.forEach((t, i) => {
+      if (i < from || i >= from + PER_PAGE) return;
       const pc = t.pct * 100, isFav = favs.includes(t.symbol);
       const isNew = t.kind !== 'btc' && prevSyms.size && !prevSyms.has(t.symbol);
       const el = document.createElement('div');
       el.className = 'card' + (isFav ? ' fav' : ''); el.dataset.coin = t.symbol;
       el.innerHTML = `
-        <div class="top"><span class="star${isFav ? ' on' : ''}" title="즐겨찾기">${starSvg(isFav)}</span>${t.kind === 'btc' ? '<span class="tf">' + t.tfLabel + '</span>' : '<span class="rank">' + (++altRank) + '</span>'}<span class="sym" title="바이낸스에서 열기">${t.symbol.replace(/USDT$/, '')}</span>
+        <div class="top"><span class="star${isFav ? ' on' : ''}" title="즐겨찾기">${starSvg(isFav)}</span>${t.kind === 'btc' ? '<span class="tf">' + t.tfLabel + '</span>' : '<span class="rank">' + (i + 1) + '</span>'}<span class="sym" title="바이낸스에서 열기">${t.symbol.replace(/USDT$/, '')}</span>
           ${isNew ? '<span class="new">NEW</span>' : ''}
           <span class="chg ${pc >= 0 ? 'up' : 'dn'}">${pc >= 0 ? '+' : ''}${pc.toFixed(2)}%</span></div>
         <div class="chart"><canvas></canvas><button class="del" title="삭제 (Delete 키)">${ERASER_SVG}</button></div>`;
@@ -623,12 +641,14 @@ async function load() {
       card.del.onclick = e => { e.stopPropagation(); deleteSelected(); };
       cards.push(card); attachMouse(card); drawCard(card);
     });
-    prevSyms = new Set(top.filter(t => t.kind !== 'btc').map(t => t.symbol));
-    $('status').textContent = '마지막 갱신 ' + new Date().toLocaleTimeString('ko-KR');
-  } catch (e) {
-    if (my === reqId) $('status').textContent = '불러오기 실패, 다음 정각 분에 재시도';
-  }
 }
+document.querySelectorAll('[data-pg]').forEach(b => b.onclick = () => {
+  if (pending || drag) return;
+  pg = +b.dataset.pg; selected = null;
+  document.querySelectorAll('[data-pg]').forEach(x => x.classList.toggle('on', x === b));
+  save(); renderCards();
+});
+document.querySelectorAll('[data-pg]').forEach(x => x.classList.toggle('on', +x.dataset.pg === pg));
 window.addEventListener('resize', () => { fitGrid(); redrawAll(); });
 if (window.visualViewport) window.visualViewport.addEventListener('resize', () => { fitGrid(); redrawAll(); });
 window.addEventListener('orientationchange', () => setTimeout(() => { fitGrid(); redrawAll(); }, 300));
